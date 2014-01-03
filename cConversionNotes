@@ -1,0 +1,107 @@
+Notes on python to c conversion:
+
+Python code performs:
+ Loading of data
+ Option Parsing
+ Layer configuration loading
+
+ Remove Python code from: 
+ convnet.cu
+ layer.cu
+ util.cu //this file may diappear completely
+ neuron.cu
+
+ ====Original Process:
+Ran convnet.py with parameters
+
+convnet inherited from gpumodel, which imported the c++ module pyconvnet/__ConvNet. 
+  
+The options.py parsers were handed all of the arguments and parsed everything into the parameters for the convNet: layers, loaded networks, set paths for saving etc. It was called from convnet/gpumodel.
+
+data.py provides the loading method for the data, so it knows what format to load, from where, and performs any preprocessing: color change, adding transposes, reflections etc.
+
+layer has all the layer types and their parameters, and works on loading them from the configuration file
+as well as chekcing for errors in their definition.
+
+shownet displays some graphs representing the trained network (need to look more closely later.)
+
+util gets the gpu id (and lock?), and checks the os type, also pickles stuff.
+
+==============
+So: DO we want to go straight from python to c++ without rewriting/ getting rid of anything? (except language)
+Do we make changes as we go?
+
+We need to take some arguments from the command line: train vs test, which network to use, may as well take all of them, since we may want to use all of them at some point and most of them are necessary.
+
+Also still makes sense to read layer config from file (not hard code)
+
+============
+How do we want to get Kinect data? recieve from else where, or build in OpenNi stuff here?
+Also pretty sure minimum batch size is needed for both training and testing...it may be insanely slow to run on a single image every call...transfer time.
+
+If pyconvnet is only used on windows, then how are workers added to the worker queue since pyconvnet is the only class that enqueues workers? Must be using pyconvnet, but from .so...
+
+pyconvnet transfers everything from python to the convnet. We need to replace this, and since it runs using the .so, we need to make our own build files.
+
+=============
+CUDA CMake notes
+
+	# packages                                                                                                                                                                                                 
+	find_package(CUDA)
+
+	# nvcc flags                                                                                                                                                                                               
+	set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-gencode arch=compute_20,code=sm_20)
+
+	cuda_compile(HELPER_O helper.cu)
+	cuda_compile(DRIVER_O driver.cu OPTIONS -G)
+
+	cuda_add_executable(driver ${HELPER_O} ${DRIVER_O})
+
+OR Libraries:
+
+==============
+CUDA Makefile notes
+
+	##############################################################
+	# CUDA Sample Makefile                                       #
+	#                                                            #
+	# Author      : Chong Ding: cding@mymail.mines.edu           #
+	# Version     : 1.0                                          #
+	# Date        : 09/15/2010                                   #
+	# Discription : generic Makefile for making CUDA programs    #
+	##############################################################
+
+	BIN               := mv 
+	CXXFLAGS          := -O3 -g
+
+
+	CUDA_INSTALL_PATH ?= /opt/development/gpu/3.2/cuda
+	CUDA_SDK_PATH ?= $(HOME)/NVIDIA_GPU_Computing_SDK
+
+
+	NVCC ?= $(CUDA_INSTALL_PATH)/bin/nvcc
+	INCD = -I"$(CUDA_SDK_PATH)/C/common/inc" -I"$(CUDA_INSTALL_PATH)/include" -I"./"
+	LIBS = -L"/opt/development/gpu/3.2/libcuda" -lcuda -L"$(CUDA_INSTALL_PATH)/lib64" -lcudart -lcublas -lcufft -L"$(CUDA_SDK_PATH)/C/common/lib" $(CUDA_SDK_PATH)/C/lib/libcutil$(LIBSUFFIX).a -lstdc++ -lpthread
+	CUDA_SDK?=3
+	COMMONFLAGS = -DCUDA_SDK=$(CUDA_SDK)
+	NVCCFLAGS := --ptxas-options=-v -O3 -G -g 
+
+
+	# files
+	CPP_SOURCES       := mv_gold.cpp 
+	CU_SOURCES        := mv.cu
+	HEADERS           := $(wildcard *.h)
+	CPP_OBJS          := $(patsubst %.cpp, %.o, $(CPP_SOURCES))
+	CU_OBJS           := $(patsubst %.cu, %.cu_o, $(CU_SOURCES))
+
+	%.cu_o : %.cu
+		$(NVCC) $(NVCCFLAGS) -c $(INCD) -o $@ $<
+
+	%.o: %.cpp
+		$(CXX) -c $(CXXFLAGS) $(INCD) -o $@ $<
+
+	$(BIN): $(CPP_OBJS) $(CU_OBJS)
+		$(CXX) -o $(BIN) $(CU_OBJS) $(CPP_OBJS) $(LDFLAGS) $(INCD) $(LIBS)
+
+	clean:
+		rm -f $(BIN) *.o *.cu_o

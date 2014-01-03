@@ -48,7 +48,7 @@ class ShowConvNet(ConvNet):
         ConvNet.__init__(self, op, load_dic)
     
     def get_gpus(self):
-        self.need_gpu = self.op.get_value('show_preds') or self.op.get_value('write_features')
+        self.need_gpu = self.op.get_value('show_preds') or self.op.get_value('write_features') or self.op.get_value('show_preds_patch')
         if self.need_gpu:
             ConvNet.get_gpus(self)
     
@@ -69,6 +69,8 @@ class ShowConvNet(ConvNet):
         #ConvNet.init_model_state(self)
         if self.op.get_value('show_preds'):
             self.sotmax_idx = self.get_layer_idx(self.op.get_value('show_preds'), check_type='softmax')
+        if self.op.get_value('show_preds_patch'):
+            self.sotmax_idx = self.get_layer_idx(self.op.get_value('show_preds_patch'), check_type='softmax')
         if self.op.get_value('write_features'):
             self.ftr_layer_idx = self.get_layer_idx(self.op.get_value('write_features'))
             
@@ -102,7 +104,7 @@ class ShowConvNet(ConvNet):
 
         pl.xticks(ticklocs, ticklabels)
         pl.xlabel('Epoch')
-#        pl.ylabel(self.show_cost)
+        #pl.ylabel(self.show_cost)
         pl.title(self.show_cost)
         
     def make_filter_fig(self, filters, filter_start, fignum, _title, num_filters, combine_chans):
@@ -216,11 +218,7 @@ class ShowConvNet(ConvNet):
                 pl.subplot(NUM_ROWS*2, NUM_COLS, r * 2 * NUM_COLS + c + 1)
                 pl.xticks([])
                 pl.yticks([])
-                try:
-                    img = data[0][img_idx,:,:,:]
-                except IndexError:
-                    # maybe greyscale?
-                    img = data[0][img_idx,:,:]
+                img = data[0][img_idx,:,:,:]
                 pl.imshow(img, interpolation='nearest')
                 true_label = int(data[1][0,img_idx])
 
@@ -236,7 +234,133 @@ class ShowConvNet(ConvNet):
                 pl.yticks(ylocs + height/2, [l[1] for l in img_labels])
                 pl.xticks([width/2.0, width], ['50%', ''])
                 pl.ylim(0, ylocs[-1] + height*2)
+
+    #create new function similar to above: instead of plotting each patch and it's predictions: plot whole image, and several patches?
+    '''
+    Plot whole image followed by some random patches from that image? Try to trace the winning class in the image?
+    '''
+    '''
+    Function Plan:
+    Input: Data, Labels, Locations, full images in this batch
+    We want: Collect the patches from same image: sort by imgidx
+    Display full image, Display patches and classifications
+        *To limit the display: ignore None for now or select random 
+    * to limit computation time, select a random image? Just classify patches from that image
+    *or: iterate: display eahc image and patches: long time
+    @@@Split into 2 functions: one does random display, one does iterative@@@
+    '''
+    def plot_patch_predictions(self):
+        #locations: (x,y,res,imgidx), images[imgidx]
+        #currently identical to above, needs altering...
+        stuff = self.get_next_batch(train=False)
+        data = stuff[2] # get a test batch # data, labels
+        locs = stuff[3]
+        image_list = stuff[4]
+        #stuff: (epoch, batchnum, [data, labels], locs, images)
+        num_classes = self.test_data_provider.get_num_classes()
+        #following defines how many sample predictions to display
+        NUM_ROWS = 2
+        NUM_COLS = 4
+        NUM_IMGS = NUM_ROWS * NUM_COLS
+        #above reset for numPatches
+        NUM_TOP_CLASSES = min(num_classes, 4) # show this many top labels
+        #assign colors to the classes: use to trace the object in the image(s)
+
+        #random image selection
+        chosen_image_idx = r.randint(0,len(image_list)-1)
+
+        #print chosen_image_idx
+        label_names = self.test_data_provider.batch_meta['label_names']
+        #for item in label_names:
+        #    print item
+        #print "DONE"
+        if len(label_names)-1 in data[1]:
+            #print "NONE CLASS EXAMPLES"
+            #print type(data[1]), data[1].shape
+            #print list(data[1].flatten()).count(len(label_names)-1)
+            none_location = list(data[1].flatten()).index(len(label_names)-1)
+            #print locs[none_location]
+            whats = [location[3] for location in locs]
+        #print "Count image ",whats.count(chosen_image_idx)
+
+        if self.only_errors:
+            preds = n.zeros((data[0].shape[1], num_classes), dtype=n.single)
+        else:
+            #instead grab all patches for single random image:
+            #collect all patches where loc[3] == chosen_image_idx
+            select_idx = [i for i,location in enumerate(locs) if location[3]==chosen_image_idx]
+            if len(select_idx) > 12:
+                rand_idx = nr.randint(0,len(select_idx),12)
+                select_idx = n.asarray(select_idx)[rand_idx]
+            #print "How many to display? ", len(select_idx)
+            #set rows and cols to divide images evenly...:
+            NUM_COLS = 4
+            NUM_ROWS = (len(select_idx)/NUM_COLS) #+ 3 #for the overall image
+            #print "NUM_ROWS: ",NUM_ROWS
+
+            for i in range(0, (len(select_idx)%NUM_COLS)):
+                select_idx.pop()
+            data[0] = n.require(data[0][:,select_idx], requirements='C')
+            data[1] = n.require(data[1][:,select_idx], requirements='C')
+            NUM_IMGS = len(select_idx)
+            preds = n.zeros((NUM_IMGS, num_classes), dtype=n.single)
+            #keep all patches in image(s)?
+        data += [preds]
+        #data = [data, labels, preds]
+
+        # Run the model
+        self.libmodel.startFeatureWriter(data, self.sotmax_idx)
+        self.finish_batch()
+        
+        fig = pl.figure(3)
+        fig.text(.4, .95, '%s test case predictions' % ('Mistaken' if self.only_errors else 'Random'))
+        if self.only_errors:
+            err_idx = nr.permutation(n.where(preds.argmax(axis=1) != data[1][0,:])[0])[:NUM_IMGS] # what the net got wrong
+            data[0], data[1], preds = data[0][:,err_idx], data[1][:,err_idx], preds[err_idx,:]
+            
+        data[0] = self.test_data_provider.get_plottable_data(data[0])
+
+        #add large image to plot at beginning...or end?
+        #plot full image in 3x4 plot here
+        #grab image that matches following patches
+        # grab image, change type, cut depth, reverse bgr to rgb
+        img = ((image_list[chosen_image_idx].astype(n.uint8))[:,:,:3])[:,:,::-1]
+        #show image (invisible otherwise?)
+        pl.imshow(img, interpolation='nearest')
+        #not showing labels for total image, so only NUM_ROWS, not *2
+        pl.show()
+        pl.clf()
+
+        for row in xrange(NUM_ROWS):#3 for full size image
+            for c in xrange(NUM_COLS):
+                img_idx = row * NUM_COLS + c
+                if data[0].shape[0] <= img_idx:
+                    break
+                pl.subplot(NUM_ROWS*2, NUM_COLS, row * 2 * NUM_COLS + c + 1)
+                pl.xticks([])
+                pl.yticks([])
+                img = data[0][img_idx,:,:,:]
+                pl.imshow(img, interpolation='nearest')
+                true_label = int(data[1][0,img_idx])
+
+                img_labels = sorted(zip(preds[img_idx,:], label_names), key=lambda x: x[0])[-NUM_TOP_CLASSES:]
+                pl.subplot(NUM_ROWS*2, NUM_COLS, (row * 2 + 1) * NUM_COLS + c + 1, aspect='equal')
+
+                ylocs = n.array(range(NUM_TOP_CLASSES)) + 0.5
+                height = 0.5
+                width = max(ylocs)
+                pl.barh(ylocs, [l[0]*width for l in img_labels], height=height, \
+                        color=['r' if l[1] == label_names[true_label] else 'b' for l in img_labels])
+                pl.title(label_names[true_label])
+                pl.yticks(ylocs + height/2, [l[1] for l in img_labels])
+                pl.xticks([width/2.0, width], ['50%', ''])
+                pl.ylim(0, ylocs[-1] + height*2)
+
+    #reconstruct image? get whole image? should be returned separately?
+    #currently returning the images and locs as well as patches and labels...
     
+    
+    #need alternate version of this for if the send-features is enabled
     def do_write_features(self):
         if not os.path.exists(self.feature_path):
             os.makedirs(self.feature_path)
@@ -259,7 +383,8 @@ class ShowConvNet(ConvNet):
                 break
         pickle(os.path.join(self.feature_path, 'batches.meta'), {'source_model':self.load_file,
                                                                  'num_vis':num_ftrs})
-                
+           
+    #need to alter following to be continuous, not one go?     
     def start(self):
         self.op.print_values()
         if self.show_cost:
@@ -268,6 +393,8 @@ class ShowConvNet(ConvNet):
             self.plot_filters()
         if self.show_preds:
             self.plot_predictions()
+        if self.show_preds_patch:
+            self.plot_patch_predictions()
         if self.write_features:
             self.do_write_features()
         pl.show()
@@ -277,7 +404,7 @@ class ShowConvNet(ConvNet):
     def get_options_parser(cls):
         op = ConvNet.get_options_parser()
         for option in list(op.options):
-            if option not in ('gpu', 'load_file', 'train_batch_range', 'test_batch_range'):
+            if option not in ('gpu', 'load_file', 'train_batch_range', 'test_batch_range', 'cam_test', 'test_one'):
                 op.delete_option(option)
         op.add_option("show-cost", "show_cost", StringOptionParser, "Show specified objective function", default="")
         op.add_option("show-filters", "show_filters", StringOptionParser, "Show learned filters in specified layer", default="")
@@ -290,6 +417,12 @@ class ShowConvNet(ConvNet):
         op.add_option("only-errors", "only_errors", BooleanOptionParser, "Show only mistaken predictions (to be used with --show-preds)", default=False, requires=['show_preds'])
         op.add_option("write-features", "write_features", StringOptionParser, "Write test data features from given layer", default="", requires=['feature-path'])
         op.add_option("feature-path", "feature_path", StringOptionParser, "Write test data features to this path (to be used with --write-features)", default="")
+        #add options here for streaming from the camera: send the results rather then save to file?
+        op.add_option("show-preds-patch","show_preds_patch", StringOptionParser, "Show patch predictions made by given softmax on test set", default="")
+        op.add_option("cam-test", "test_from_camera", BooleanOptionParser, "Get Test Batches from OpenNI Device?", default=0)#0? can i leave it False?
+        #op.add_option("send-features", "send_features", StringOptionParser, "Send the test data features (probabilities) from given layer", default="", requires=['receiver-path'])
+        #op.add_option("receiver-path", "receiver_path", StringOptionParser, "Send test data features to this (address?) (use with --send-features)", default="")
+        #the above options should trigger an option in the net: test-one, and test-from-camera?: unlimited test batches, continuous until ctrl+c...
         
         op.options['load_file'].default = None
         return op

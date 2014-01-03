@@ -32,6 +32,7 @@ import sys
 import math as m
 import layer as lay
 from convdata import *
+from kinectDataProvider import * #added provider
 from os import linesep as NL
 #import pylab as pl
 
@@ -40,6 +41,14 @@ class ConvNet(IGPUModel):
         filename_options = []
         dp_params['multiview_test'] = op.get_value('multiview_test')
         dp_params['crop_border'] = op.get_value('crop_border')
+        #check net type: add kinect options if needed:
+        if op.get_value('dp_type')=='kinect':
+            dp_params['test_from_camera'] = op.get_value('test_from_camera')
+            dp_params['multi_label'] = op.get_value('multi_label')
+            dp_params['resolutions'] = op.get_value('resolutions')
+            dp_params['final_res'] = op.get_value('final_res')
+            dp_params['with_depth'] = op.get_value('with_depth')
+            dp_params['full_resolution'] = op.get_value('full_resolution')
         IGPUModel.__init__(self, "ConvNet", op, load_dic, filename_options, dp_params=dp_params)
         
     def import_model(self):
@@ -182,6 +191,17 @@ class ConvNet(IGPUModel):
         op.add_option("conv-to-local", "conv_to_local", ListOptionParser(StringOptionParser), "Convert given conv layers to unshared local", default=[])
         op.add_option("unshare-weights", "unshare_weights", ListOptionParser(StringOptionParser), "Unshare weight matrices in given layers", default=[])
         op.add_option("conserve-mem", "conserve_mem", BooleanOptionParser, "Conserve GPU memory (slower)?", default=0)
+        #added options for kinectDataProvider #how to make these only necessary for kinect? move to class? Defaults should make these ignorable
+        op.add_option("cam-test", "test_from_camera", BooleanOptionParser, "Get Test Batches from OpenNI Device?", default=0)#0? can i leave it False?
+        op.add_option("multi-label","multi_label",BooleanOptionParser,"Can an item have multiple labels?",default=0)
+        op.add_option("res", "resolutions",ListOptionParser(IntegerOptionParser),"Collect patches at given resolutions",default=[])
+        op.add_option("final-res", "final_res",IntegerOptionParser,"Collect patches at given resolutions",default=48)
+        op.add_option("with-depth","with_depth",BooleanOptionParser,"Use the depth information for training and testing?",default=0) #False
+        op.add_option("full-res","full_resolution",BooleanOptionParser,"Use full Kinect Resolution?",default=1) #True
+        op.add_option("subtract-mean-patch", "subtract_mean_patch", BooleanOptionParser, "Subtract mean patch rather than mean image?", default=0) #False
+        op.add_option("use-drop-out", "use_drop_out", BooleanOptionParser, "Drop out 20% of data from image?", default=1)
+        op.add_option("scale-depth", "scale_depth", BooleanOptionParser, "Scale the depth data?", default=0, requires=['with_depth'])
+        print "ADDED OPTIONS"
                 
         op.delete_option('max_test_err')
         op.options["max_filesize_mb"].default = 0
@@ -192,6 +212,7 @@ class ConvNet(IGPUModel):
         DataProvider.register_data_provider('cifar', 'CIFAR', CIFARDataProvider)
         DataProvider.register_data_provider('dummy-cn-n', 'Dummy ConvNet', DummyConvNetDataProvider)
         DataProvider.register_data_provider('cifar-cropped', 'Cropped CIFAR', CroppedCIFARDataProvider)
+        DataProvider.register_data_provider('kinect', 'RGBD', KinectDataProvider) #added provider
         
         return op
     

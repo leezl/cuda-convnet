@@ -4,3 +4,4 @@ obj/
 _ConvNet.so
 moredataproviders.py
 whales
+*.ipynb

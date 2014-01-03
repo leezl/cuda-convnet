@@ -2,3 +2,62 @@ cuda-convnet
 High-performance C++/CUDA implementation of abstract convolutional neural networks
 
 See http://code.google.com/p/cuda-convnet/ for documentation.
+
+
+Traditional Training on CIFAR:
+python convnet.py --data-path=data/cifar-10-py-colmajor/ --save-path=storage/tmp --test-range=6 --train-range=1-5 --layer-def=./example-layers/layers-19pct.cfg --layer-params=./example-layers/layer-params-19pct.cfg --data-provider=cifar --test-freq=13
+
+Test Training on Kinect Data:
+python convnet.py --data-path=data/shapetest/real/depth/ --save-path=storage/tmpKinect --test-range=101-135 --train-range=0-100 --layer-def=./example-layers/layers-FirstTest.cfg --layer-params=./example-layers/layer-params-FirstTest.cfg --data-provider=kinect --test-freq=13
+
+python convnet.py --data-path=data/pickledGZipLab --save-path=storage/tmpKinect/WithDepth/WithDropOut/v2 --test-range=180-226 --train-range=0-179 --layer-def=./example-layers/layers-FirstTestWithDepthv2.cfg --layer-params=./example-layers/layer-params-FirstTestWithDepthv2.cfg --data-provider=kinect --test-freq=180 --with-depth=1 --test-one=0
+
+python convnet.py --data-path=data/pickledGZip --save-path=storage/tmpKinect/WithDepth/v1 --test-range=111-165 --train-range=0-110 --layer-def=./example-layers/layer-ImageNetTest.cfg --layer-params=./example-layers/layer-params-ImageNetTest.cfg --data-provider=kinect --test-freq=111 --with-depth=1 --test-one=0
+
+python convnet.py --data-path=data/pickledGZipLab --save-path=storage/tmpKinect/WithDepth/WithDropOut/v2 --test-range=181-227 --train-range=0-180 --layer-def=./example-layers/layers-FirstTestWithDepthv2.cfg --layer-params=./example-layers/layer-params-FirstTestWithDepthv2.cfg --data-provider=kinect --test-freq=181 --with-depth=1 --test-one=0
+
+//to continue training
+python convnet.py -f storage/tmpKinect/WithDepth/v1/ConvNet__2013-12-10_09.16.39
+
+python convnet.py --data-path=data/picklezipRGBD --save-path=storage/tmpKinect/noDepth --test-range=4 --train-range=0-3 --layer-def=./example-layers/layers-FirstTestNoDepth.cfg --layer-params=./example-layers/layer-params-FirstTestNoDepth.cfg --data-provider=kinect --test-freq=13 --with_depth=1 --test-one=1
+
+//view Probability
+python shownet.py -f storage/tmpKinect/WithDepth/v1/ConvNet__2013-12-10_09.16.39 --show-cost=logprob --cost-idx=1
+
+//view Filters
+python shownet.py -f storage/tmpKinect/WithDepth/v1/ConvNet__2013-12-10_09.16.39 --show-filters=conv32
+
+//view Predictions on test
+python shownet.py -f storage/tmpKinect/WithDepth/v1/ConvNet__2013-12-10_09.16.39 --show-preds=probs
+
+//view predictions from camera: kinect provider only:
+python shownet.py -f storage/tmpKinect/WithDepth/WithDropOut/v2/ConvNet__2013-12-30_19.19.57 --show-preds-patch=probs --cam-test=1
+
+
+Subtracting the Mean:
+
+Results after one epoch on CIFAR, with and without subtracting the mean:
+1.533518, 0.553900 (with)
+1.577642, 0.576800 (without)
+
+After three epochs:
+1.236021, 0.434400 (with)
+1.309743, 0.469300 (without)
+
+Trains faster. Is it more accurate?
+The filter images suggest that the mean subtracted one is learning more valuable filters; Most of the non-mean subtracted ones are blank. (See pictures in the storage folders).
+
+Training with depth vs Without:
+
+(Work in Progress: checking mean calculations, speeding up data prep)
+
+Mean Calculations:
+If we find the mean of testing, and subtract it from the test data...? 
+
+Note: need to add to gpumodel.py:
+Ctrl+C signal handler so when we are streaming from the camera we can stop safely... may be unecessary
+Also: need to be able to pass results on or reconstruct the result image from returned labels: see get_test_error(): aggregate
+
+*test_one should be true at same time as test_from_camera: so we don't average across infinite streaming batches... (ie no test range given)
+
+Serious: We need tons of data from the lab: our lighting is very different from the RGBD set. Also more items from everywhere.

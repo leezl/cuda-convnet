@@ -1,0 +1,34 @@
+More Notes:
+
+Currently, the camera streaming is too slow. Reshaping the data (C order, flattened) takes the most time, with patch accumulation taking the second most time, but the difference is huge: REshaping takes about 2 seconds, which is really bad, while patches only takes about a quarter second. Not great, but more reasonable.
+
+scaling depth:      0.0979809761047         
+remove mean total:  2.86102294922e-06       *> Not always performed
+making patches:     0.220026016235          *
+remove mean patch:  0.164243221283          *
+returning camera batch
+Cutting batch       3.09944152832e-06       *> Not always performed
+Drop Out            0.597651004791          * 
+Reshaping data      3.27792191505           * 
+
+
+Interesting point: using the overall mean results in better perfromance. Also no scaling of data seems to help as well. SO: save time: remove both.
+Also: make get plottable data return the original data instead of reconstructing it: this means we don't need to worry about finding the correct patch of mean to add back in, or about drawing the images with noise in them.
+
+First:
+
+DONE: Verify that the depth scaling makes sense: Is there a better way to do it? How much information are we losing doing it the way we are? When maximum depth changes, and the resolution across an object changes based on distance...Can our nets actually manage this? I'd like to say yes,  but need to check. After Testing: behavior better without scaling: keep as an option in case it proves useful under certain conditions, otherwise remove.
+
+Look at each chunk, and attempt to improve speed: may not always be possible, but everything is currently done naively, so we should be able to make some progress.
+
+DropOut and Reshaping are the main focuses for improvement, followed by patches, and mean subtraction.
+
+FInally: see if we can move things specifically for the camera: it may be possible to speed up camera image processing in ways that we cannot speed up the testing. 
+
+
+
+It would probably make sense to use an entirely different system if we cannot get the speed we need here...whihc means more then likely taking the cuda code from convnet and going on to C++ only implementations instead of having python manage loading and preprocessing. May be possible to move more into the C code from python...
+
+We should try to move several things into layers in the network: 
+	* dropout for both initial data and layer weights.
+	* add that lighting correction from their paper

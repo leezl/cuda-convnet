@@ -23,7 +23,9 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include <cutil_inline.h>
+ 
+//#include <cutil_inline.h>
+#include <helper_cuda.h>
 #include <iostream>
 
 #include <layer_kernels.cuh>
@@ -54,9 +56,6 @@ Layer::Layer(ConvNet* convNet, PyObject* paramsDict, bool trans) :
     _conserveMem = pyDictGetInt(paramsDict, "conserveMem");
     _outputs = _actsTarget < 0 ? new NVMatrix() : NULL;
     _actsGrad = _actsGradTarget < 0 ? new NVMatrix() : NULL;
-
-    _dropout = pyDictGetFloat(paramsDict, "dropout");
-    _dropout_mask = new NVMatrix();
 }
 
 void Layer::fpropNext(PASS_TYPE passType) {
@@ -113,18 +112,6 @@ void Layer::fprop(NVMatrixV& v, PASS_TYPE passType) {
             fpropActs(i, _actsTarget >= 0 || i > 0, passType);
         }
     }
-
-    if (passType != PASS_TEST && _dropout > 0.0) {
-        _dropout_mask.resize(getActs().getNumRows(), getActs().getNumCols());
-        _dropout_mask.randomizeUniform();
-        _dropout_mask.biggerThanScalar(_dropout);
-        getActs().eltwiseMult(_dropout_mask);
-    }
-      
-    if (passType == PASS_TEST && _dropout > 0.0) {
-        getActs().scale(1.0 - _dropout);
-    }
-
     fpropNext(passType);
 }
 
@@ -143,10 +130,6 @@ void Layer::bprop(NVMatrix& v, PASS_TYPE passType) {
     }
     getActs().transpose(_trans);
     
-    if (_dropout > 0.0) {
-      v.eltwiseMult(_dropout_mask);
-    }
-
     bpropCommon(v, passType);
     
     if (isGradProducer()) {
@@ -444,7 +427,7 @@ void LocalLayer::copyToGPU() {
             cudaMalloc(&_filterConns->at(i).dFilterConns, sizeof(int) * _groups->at(i) * _filterChannels->at(i));
             cudaMemcpy(_filterConns->at(i).dFilterConns, _filterConns->at(i).hFilterConns,
                        sizeof(int) * _groups->at(i) * _filterChannels->at(i), cudaMemcpyHostToDevice);
-            cutilCheckMsg("cudaMemcpy: failed");
+            getLastCudaError("cudaMemcpy: failed");
         }
     }
 }

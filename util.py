@@ -37,13 +37,24 @@ class UnpickleError(Exception):
 VENDOR_ID_REGEX = re.compile('^vendor_id\s+: (\S+)')
 GPU_LOCK_NO_SCRIPT = -2
 GPU_LOCK_NO_LOCK = -1
+MAGIC_VS = -1
 
 try:
     import magic
-    ms = magic.open(magic.MAGIC_NONE)
-    ms.load()
+    if hasattr(magic, 'open'):
+        ms = magic.open(magic.MAGIC_NONE)
+        ms.load()
+        MAGIC_VS = 0
+    else:
+        #wrong module? check other functions exist:
+        if hasattr(magic, 'from_file'):
+            #has other api, set flag: 
+            MAGIC_VS = 1
+            ms = None
+            #don't need to load, just use differently below
 except ImportError: # no magic module
     ms = None
+    print "WARNING: Failed to load Magic Module; cannot open GZip files"
 
 def get_gpu_lock(id=-1):
     import imp
@@ -69,10 +80,10 @@ def pickle(filename, data, compress=False):
 def unpickle(filename):
     if not os.path.exists(filename):
         raise UnpickleError("Path '%s' does not exist." % filename)
-    if ms is not None and ms.file(filename).startswith('gzip'):
+    if (ms is not None and MAGIC_VS==0 and ms.file(filename).startswith('gzip')) or (MAGIC_VS==1 and magic.from_file(filename).startswith('gzip')):
         fo = gzip.open(filename, 'rb')
         dict = cPickle.load(fo)
-    elif ms is not None and ms.file(filename).startswith('Zip'):
+    elif (ms is not None and MAGIC_VS==0 and ms.file(filename).startswith('Zip')) or (MAGIC_VS==1 and magic.from_file(filename).startswith('Zip')):
         fo = zipfile.ZipFile(filename, 'r', zipfile.ZIP_DEFLATED)
         dict = cPickle.loads(fo.read('data'))
     else:
