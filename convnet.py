@@ -195,7 +195,7 @@ class ConvNet(IGPUModel):
         op.add_option("cam-test", "test_from_camera", BooleanOptionParser, "Get Test Batches from OpenNI Device?", default=0)#0? can i leave it False?
         op.add_option("multi-label","multi_label",BooleanOptionParser,"Can an item have multiple labels?",default=0)
         op.add_option("res", "resolutions",ListOptionParser(IntegerOptionParser),"Collect patches at given resolutions",default=[])
-        op.add_option("final-res", "final_res",IntegerOptionParser,"Collect patches at given resolutions",default=48)
+        op.add_option("final-res", "final_res",IntegerOptionParser,"Final resized resolution of patches",default=48)
         op.add_option("with-depth","with_depth",BooleanOptionParser,"Use the depth information for training and testing?",default=0) #False
         op.add_option("full-res","full_resolution",BooleanOptionParser,"Use full Kinect Resolution?",default=1) #True
         op.add_option("subtract-mean-patch", "subtract_mean_patch", BooleanOptionParser, "Subtract mean patch rather than mean image?", default=0) #False
