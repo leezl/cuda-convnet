@@ -126,26 +126,26 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
             print item
 
         #to make up for previous versions, where these options did not yet exist: (backwards comp...kinda sucks)
-        #req_ops = {'test_from_camera': False, 'multi_label': False, 'resolutions': [96], 'with_depth': False, 
-        #    'full_resolution': True, 'subtract_mean_patch': False, 'use_drop_out': True, 'scale-depth': False}
+        req_ops = {'test_from_camera': False, 'multi_label': False, 'resolutions': [96], 'with_depth': False, 
+            'full_resolution': True, 'subtract_mean_patch': False, 'use_drop_out': True, 'scale_depth': False}
         #check for existance of each, else default
-        #for item in req_ops.keys():
-        #    if item in dp_params:
-        #        setattr(self, item, dp_params[item])
-        #    else:
-        #        setattr(self, item, req_ops[item])
+        for item in req_ops.keys():
+            if item in dp_params:
+                setattr(self, item, dp_params[item])
+            else:
+                setattr(self, item, req_ops[item])
 
         #the following should be set in dp_params eventually, for now set it here
-        self.test_from_camera = dp_params['test_from_camera']#False 
-        self.multilabel = dp_params['multi_label']#False #select single or many labels allowed
+        #self.test_from_camera = dp_params['test_from_camera']#False 
+        #self.multilabel = dp_params['multi_label']#False #select single or many labels allowed
         #self.flatlabels = True #replaced with sensible type check.
         #self.multiresolution = dp_params['resolutions']#False #replace with resolution list: if it is non-empty this is true
-        self.resolutions = dp_params['resolutions']
-        self.with_depth = dp_params['with_depth']#False
-        self.full_resolution = dp_params['full_resolution']#True #on certain machines larger resolutions cannot be read from camera
-        self.subtract_mean_patch = dp_params['subtract_mean_patch']#True #helpful only if single resolution, no resizing done...
-        self.use_drop_out = dp_params['use_drop_out']
-        sefl.scale_depth = dp_params['scale_depth']
+        #self.resolutions = dp_params['resolutions']
+        #self.with_depth = dp_params['with_depth']#False
+        #self.full_resolution = dp_params['full_resolution']#True #on certain machines larger resolutions cannot be read from camera
+        #self.subtract_mean_patch = dp_params['subtract_mean_patch']#True #helpful only if single resolution, no resizing done...
+        #self.use_drop_out = dp_params['use_drop_out']
+        #self.scale_depth = dp_params['scale_depth']
         self.word = "" #we still have a whole dictionary, and aren't doing multilabel yet.
 
         #TESTING OPTIONS: (These may end up being always True or False, not sure if they matter yet)
@@ -747,11 +747,11 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         if not self.subtract_mean_patch:
             #mean shape still an issue here, really what we need is to keep a clean copy of the data rather then trying to rebuild it.
             #above would also solve our noise problem: when we remove 20%, how do we get it back?
-            assert type(data[:][0]) == type(self.mean_data), "Mean data and image data have different types "+str(type(data[:][0]))+","+str(type(self.mean_data))
+            assert type(data[:][0]) == type(self.data_mean), "Mean data and image data have different types "+str(type(data[:][0]))+","+str(type(self.data_mean))
             data = data.T.reshape(data.shape[1], self.num_colors, self.final_size, self.final_size).swapaxes(1,3).swapaxes(1,2)
             data = data[:,:,:,::-1]
-            assert data[0].shape == self.mean_data.shape, "Mean data is different shape than the image data "+str(self.mean_data.shape)+","+str(data[0].shape)
-            return n.require(data+self.mean_data[:,:,::-1], dtype=n.nuint8)[:,:,:,1:]
+            assert data[0].shape == self.data_mean.shape, "Mean data is different shape than the image data "+str(self.data_mean.shape)+","+str(data[0].shape)
+            return n.require(data+self.data_mean[:,:,::-1], dtype=n.nuint8)[:,:,:,1:]
         else:
             assert type(data[:][0]) == type(self.mean_patch), "Mean patch and image patch have different types "+str(type(data[:][0]))+","+str(type(self.mean_patch))
             data = (data.T.reshape(data.shape[1], self.num_colors, self.final_size, self.final_size)).swapaxes(1,3).swapaxes(1,2)
@@ -761,6 +761,14 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
             assert data[0].shape == self.mean_patch.shape, "Mean patch is different shape than the image patches "+str(self.mean_patch.shape)+","+str(data[0].shape)
             return n.require(data+(self.mean_patch[:,:,::-1]), dtype=n.uint8)[:,:,:,1:]
         #is there a way to remove this reshaping? just keep the original data and return that? Remove the need to find correct mean patch, and drop out issue...
+
+    def get_plottable_data_what(self, data, image, locs):
+        newForm = []
+        for i in range(0, len(locs)): #zip(data, locs):
+            # grab patch from image, overwrite data[i]
+            newForm.append(cv2.resize(n.require(image[locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:3], dtype=n.uint8), (self.final_size, self.final_size)))
+        return n.asarray(newForm)
+
 
     '''
     Really I should stop writing this way: tests belong elsewhere, but I am not sure how to 

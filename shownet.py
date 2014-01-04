@@ -254,7 +254,7 @@ class ShowConvNet(ConvNet):
         #currently identical to above, needs altering...
         stuff = self.get_next_batch(train=False)
         data = stuff[2] # get a test batch # data, labels
-        locs = stuff[3]
+        locs = n.asarray(stuff[3]) # (upperleftx, upperlefty, size, imgidx)
         image_list = stuff[4]
         #stuff: (epoch, batchnum, [data, labels], locs, images)
         num_classes = self.test_data_provider.get_num_classes()
@@ -274,13 +274,13 @@ class ShowConvNet(ConvNet):
         #for item in label_names:
         #    print item
         #print "DONE"
-        if len(label_names)-1 in data[1]:
-            #print "NONE CLASS EXAMPLES"
-            #print type(data[1]), data[1].shape
-            #print list(data[1].flatten()).count(len(label_names)-1)
-            none_location = list(data[1].flatten()).index(len(label_names)-1)
-            #print locs[none_location]
-            whats = [location[3] for location in locs]
+        #if len(label_names)-1 in data[1]:
+        #    #print "NONE CLASS EXAMPLES"
+        #    #print type(data[1]), data[1].shape
+        #    #print list(data[1].flatten()).count(len(label_names)-1)
+        #    none_location = list(data[1].flatten()).index(len(label_names)-1)
+        #    #print locs[none_location]
+        #    whats = [location[3] for location in locs]
         #print "Count image ",whats.count(chosen_image_idx)
 
         if self.only_errors:
@@ -302,6 +302,7 @@ class ShowConvNet(ConvNet):
                 select_idx.pop()
             data[0] = n.require(data[0][:,select_idx], requirements='C')
             data[1] = n.require(data[1][:,select_idx], requirements='C')
+            locs = locs[select_idx] #keep correct locs too
             NUM_IMGS = len(select_idx)
             preds = n.zeros((NUM_IMGS, num_classes), dtype=n.single)
             #keep all patches in image(s)?
@@ -317,8 +318,17 @@ class ShowConvNet(ConvNet):
         if self.only_errors:
             err_idx = nr.permutation(n.where(preds.argmax(axis=1) != data[1][0,:])[0])[:NUM_IMGS] # what the net got wrong
             data[0], data[1], preds = data[0][:,err_idx], data[1][:,err_idx], preds[err_idx,:]
-            
-        data[0] = self.test_data_provider.get_plottable_data(data[0])
+            locs = locs[err_idx]
+
+        #can we replace this? We have the full images, just grab the correct patches, no mean, no scaling, no drop out...
+        #data[0] = self.test_data_provider.get_plottable_data(data[0])
+        data[0] = self.test_data_provider.get_plottable_data_what(data[0], image_list[chosen_image_idx], locs)
+        #print len(locs)
+        #for i in range(0, len(locs)): #zip(data, locs):
+        #    # grab patch from image, overwrite data[i]
+        #    print image_list[chosen_image_idx][locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:].shape
+        #    print len(data),',',data[0].shape,',',type(data[0]),',',data[0][:,0].shape
+        #    data[0][:,i] = image_list[chosen_image_idx][locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:3]
 
         #add large image to plot at beginning...or end?
         #plot full image in 3x4 plot here
@@ -358,7 +368,83 @@ class ShowConvNet(ConvNet):
 
     #reconstruct image? get whole image? should be returned separately?
     #currently returning the images and locs as well as patches and labels...
-    
+
+    '''
+    Use this function to work on overall prediction: ignore low probability, combine probabilities for patches
+    '''
+    def plot_patch_predictions_total(self):
+        #locations: (x,y,res,imgidx), images[imgidx]
+        #currently identical to above, needs altering...
+        stuff = self.get_next_batch(train=False)
+        data = stuff[2] # get a test batch # data, labels
+        locs = n.asarray(stuff[3]) # (upperleftx, upperlefty, size, imgidx)
+        image_list = stuff[4]
+        #stuff: (epoch, batchnum, [data, labels], locs, images)
+        num_classes = self.test_data_provider.get_num_classes()
+        #following defines how many sample predictions to display
+        NUM_ROWS = 2
+        NUM_COLS = 4
+        NUM_IMGS = NUM_ROWS * NUM_COLS
+        #above reset for numPatches
+        NUM_TOP_CLASSES = min(num_classes, 4) # show this many top labels
+        #assign colors to the classes: use to trace the object in the image(s)
+
+        #random image selection
+        chosen_image_idx = r.randint(0,len(image_list)-1)
+
+        #print chosen_image_idx
+        label_names = self.test_data_provider.batch_meta['label_names']
+
+        if self.only_errors:
+            preds = n.zeros((data[0].shape[1], num_classes), dtype=n.single)
+        else:
+            #instead grab all patches for single random image:
+            #collect all patches where loc[3] == chosen_image_idx
+            select_idx = [i for i,location in enumerate(locs) if location[3]==chosen_image_idx]
+            #folowing limits to 12 patches, cause plot can't handle many
+            if len(select_idx) > 12:
+                rand_idx = nr.randint(0,len(select_idx),12)
+                select_idx = n.asarray(select_idx)[rand_idx]
+            #print "How many to display? ", len(select_idx)
+            #set rows and cols to divide images evenly...:
+            NUM_COLS = 4
+            NUM_ROWS = (len(select_idx)/NUM_COLS) #+ 3 #for the overall image
+            #print "NUM_ROWS: ",NUM_ROWS
+
+            for i in range(0, (len(select_idx)%NUM_COLS)):
+                select_idx.pop()
+            data[0] = n.require(data[0][:,select_idx], requirements='C')
+            data[1] = n.require(data[1][:,select_idx], requirements='C')
+            locs = locs[select_idx] #keep correct locs too
+            NUM_IMGS = len(select_idx)
+            preds = n.zeros((NUM_IMGS, num_classes), dtype=n.single)
+            #keep all patches in image(s)?
+        data += [preds]
+        #data = [data, labels, preds]
+
+        # Run the model
+        self.libmodel.startFeatureWriter(data, self.sotmax_idx)
+        self.finish_batch()
+        #preds should now contain array imgs*classes of probabilities
+        #we want to collect these values into an image...
+        
+        fig = pl.figure(3)
+        fig.text(.4, .95, '%s test case predictions' % ('Mistaken' if self.only_errors else 'Random'))
+
+        #can we replace this? We have the full images, just grab the correct patches, no mean, no scaling, no drop out...
+        #data[0] = self.test_data_provider.get_plottable_data(data[0])
+        data[0] = self.test_data_provider.get_plottable_data_what(data[0], image_list[chosen_image_idx], locs)
+
+        #add large image to plot at beginning...or end?
+        #plot full image in 3x4 plot here
+        #grab image that matches following patches
+        # grab image, change type, cut depth, reverse bgr to rgb
+        img = ((image_list[chosen_image_idx].astype(n.uint8))[:,:,:3])[:,:,::-1]
+        #show image (invisible otherwise?)
+        pl.imshow(img, interpolation='nearest')
+        #not showing labels for total image, so only NUM_ROWS, not *2
+        pl.show()
+        pl.clf()
     
     #need alternate version of this for if the send-features is enabled
     def do_write_features(self):

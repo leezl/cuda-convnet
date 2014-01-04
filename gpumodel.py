@@ -130,6 +130,9 @@ class IGPUModel:
     def init_model_lib(self):
         pass
     
+    '''
+    We want to be able to stream from camera: so self.test_only, self.cam_test: loop forever. See get_test_error
+    '''
     def start(self):
         if self.test_only:
             self.test_outputs += [self.get_test_error()]
@@ -256,6 +259,7 @@ class IGPUModel:
         return self.parse_batch_data(dp.get_next_batch(), train=train)
     
     def parse_batch_data(self, batch_data, train=True):
+        print "PARSING DATA: cuts locations..."
         return batch_data[0], batch_data[1], batch_data[2]['data']
     
     def start_batch(self, batch_data, train=True):
@@ -299,6 +303,9 @@ class IGPUModel:
         test_error = tuple([sum(t[r] for t in test_outputs) / (1 if (self.test_one or self.test_from_camera) else len(self.test_batch_range)) for r in range(len(test_outputs[-1]))])
         return test_error
     
+    '''
+    When streaming from camera we do not know the actual labels. So we need to be able to store/display results some other informative way.
+    '''
     def get_test_error(self):
         #gets locs from kinect data provider here..
         next_data = self.get_next_batch(train=False)
@@ -317,7 +324,7 @@ class IGPUModel:
             #TODO: if we are streaming from camera, we do not want to keep test results forever. : drop this after some amount...
             if self.op.get_value('test_from_camera'):
                 #drop first batch in list
-                assert len(test_outputs)>1, "tets_outputs too short to drop a batch "+str(len(test_outputs))
+                assert len(test_outputs)>1, "test_outputs too short to drop a batch "+str(len(test_outputs))
                 test_outputs.pop(0)#first one inefficient
             #if self.camera_stream: #while len(test_outputs)>30: #or some number or drop each time if we know we're streaming
             #   test_outputs.pop(0) #pop first item out
