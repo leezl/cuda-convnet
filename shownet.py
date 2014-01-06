@@ -381,63 +381,42 @@ class ShowConvNet(ConvNet):
         image_list = stuff[4]
         #stuff: (epoch, batchnum, [data, labels], locs, images)
         num_classes = self.test_data_provider.get_num_classes()
-        #following defines how many sample predictions to display
-        NUM_ROWS = 2
-        NUM_COLS = 4
-        NUM_IMGS = NUM_ROWS * NUM_COLS
-        #above reset for numPatches
-        NUM_TOP_CLASSES = min(num_classes, 4) # show this many top labels
-        #assign colors to the classes: use to trace the object in the image(s)
 
-        #random image selection
+        #random image selection (to be removed later...display all, or predict all)
         chosen_image_idx = r.randint(0,len(image_list)-1)
 
-        #print chosen_image_idx
+        #grab possible labels
         label_names = self.test_data_provider.batch_meta['label_names']
 
-        if self.only_errors:
-            preds = n.zeros((data[0].shape[1], num_classes), dtype=n.single)
-        else:
-            #instead grab all patches for single random image:
-            #collect all patches where loc[3] == chosen_image_idx
-            select_idx = [i for i,location in enumerate(locs) if location[3]==chosen_image_idx]
-            #folowing limits to 12 patches, cause plot can't handle many
-            if len(select_idx) > 12:
-                rand_idx = nr.randint(0,len(select_idx),12)
-                select_idx = n.asarray(select_idx)[rand_idx]
-            #print "How many to display? ", len(select_idx)
-            #set rows and cols to divide images evenly...:
-            NUM_COLS = 4
-            NUM_ROWS = (len(select_idx)/NUM_COLS) #+ 3 #for the overall image
-            #print "NUM_ROWS: ",NUM_ROWS
-
-            for i in range(0, (len(select_idx)%NUM_COLS)):
-                select_idx.pop()
-            data[0] = n.require(data[0][:,select_idx], requirements='C')
-            data[1] = n.require(data[1][:,select_idx], requirements='C')
-            locs = locs[select_idx] #keep correct locs too
-            NUM_IMGS = len(select_idx)
-            preds = n.zeros((NUM_IMGS, num_classes), dtype=n.single)
-            #keep all patches in image(s)?
+        #grab all patches for single random image:
+        #collect all patches where loc[3] == chosen_image_idx
+        select_idx = [i for i,location in enumerate(locs) if location[3]==chosen_image_idx]
+        #grab images, labels, and locs
+        data[0] = n.require(data[0][:,select_idx], requirements='C')
+        data[1] = n.require(data[1][:,select_idx], requirements='C')
+        locs = locs[select_idx] #keep correct locs too
+        # grab enough space to store the results into
+        preds = n.zeros((len(select_idx), num_classes), dtype=n.single)
+        # add space for results, this is how we get them from FeatureWriter
         data += [preds]
         #data = [data, labels, preds]
 
         # Run the model
         self.libmodel.startFeatureWriter(data, self.sotmax_idx)
         self.finish_batch()
-        #preds should now contain array imgs*classes of probabilities
+        #preds should now contain array patches*classes of probabilities
         #we want to collect these values into an image...
-        
+
+        votingArray = create_voting_image(image_list[chosen_image_idx], data, locs)
+
+        #following may not be necessary
         fig = pl.figure(3)
         fig.text(.4, .95, '%s test case predictions' % ('Mistaken' if self.only_errors else 'Random'))
 
-        #can we replace this? We have the full images, just grab the correct patches, no mean, no scaling, no drop out...
-        #data[0] = self.test_data_provider.get_plottable_data(data[0])
+        #grabs the original patches
         data[0] = self.test_data_provider.get_plottable_data_what(data[0], image_list[chosen_image_idx], locs)
 
-        #add large image to plot at beginning...or end?
-        #plot full image in 3x4 plot here
-        #grab image that matches following patches
+        #grab image that matches patches
         # grab image, change type, cut depth, reverse bgr to rgb
         img = ((image_list[chosen_image_idx].astype(n.uint8))[:,:,:3])[:,:,::-1]
         #show image (invisible otherwise?)
@@ -445,6 +424,21 @@ class ShowConvNet(ConvNet):
         #not showing labels for total image, so only NUM_ROWS, not *2
         pl.show()
         pl.clf()
+
+    def create_voting_image(self, image, data, locs):
+        # create an array representing the image: x*y*numClasses
+        votingArray = n.zeros(image.shape[0],image.shape[1], data[2].shape[1])
+        # for each patch, store the probabilities for all classes in their position (x, y, class)->(x+size, y+size, class)
+        print "Debug ", preds.shape
+        for i in range(0, len(locs)):
+            # create patches of correct size and shape where value equal probability from preds
+            patchVotes = n.asarray([n.ones((locs[i][2], locs[i][2]), dtype=n.single) * item for item in data[2][i]])
+            print patchVotes.shape,',',votingArray[locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:].shape
+            # update values in votingArray # need to pick combo operator...Add? max?
+            votingArray[locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:] = patchVotes
+        # combine them by...addition? largest? Try some, see what happens.
+        # find way to display this...? 
+        return votingArray
     
     #need alternate version of this for if the send-features is enabled
     def do_write_features(self):

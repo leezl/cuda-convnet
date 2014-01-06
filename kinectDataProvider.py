@@ -421,7 +421,6 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         locations = []
         #keeping square patches only
         width=height=resolution
-        index = 0
         #iterate through rows
         for i in range(0,  image.shape[0]-(image.shape[0]%width)+1, stride):#from 0 to right #-width instead?
             #iterate through columns
@@ -429,19 +428,16 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
                 #check if we went over the x & y image boundary; Fill with 0 if we did
                 if (i+width>image.shape[0] and j+height>image.shape[1]):
                     #slide back over
-                    patch = n.zeros((width, height, image.shape[2]))
                     patch = image[image.shape[0]-width:image.shape[0], image.shape[1]-height:image.shape[1]]
                     location = (image.shape[0]-width, image.shape[1]-height, resolution)
                 #check if we went over the x image boundary
                 elif (i+width>image.shape[0]):
                     #slide back over
-                    patch = n.zeros((width, height, image.shape[2]))
                     patch = image[image.shape[0]-width:image.shape[0], j:j+height]
                     location = (image.shape[0]-width, j, resolution)
                 #check if we went over the y image boundary
                 elif (j+height>image.shape[1]):
                     #slide back over
-                    patch = n.zeros((width, height, image.shape[2]))
                     patch = image[i:i+width, image.shape[1]-height:image.shape[1]]
                     location = (i,image.shape[1]-height, resolution)
                 #fine: within image, just get patches
@@ -455,7 +451,6 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
                     patch = cv2.resize(patch, (finalRes, finalRes))
                 patches.append(patch)
                 locations.append(location)
-                index = index + 1
         # add return of locations list
         #print "debug ",len(patches),',',len(locations)
         return patches, locations #,[(upperleftx, upperlefty, size),...]

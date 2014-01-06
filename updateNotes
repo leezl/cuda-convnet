@@ -1,0 +1,62 @@
+Update Notes:
+ All changes listed :
+ https://github.com/nitishsrivastava/deepnet/wiki/Compiling-with-CUDA-5
+
+ (even check Makefile paths)
+
+ +
+
+Cuda installed thusly in 13.04:
+ http://blog.bloemsaat.com/2013/03/17/installing-cuda-on-ubuntu-13-04-raring-ringtail/
+
+
+Probably works with normal cuda install on older ubuntu releases.
+
+cutGetMaxGflopsDeviceId -> gpuGetMaxGflopsDeviceId
+
+
+Update Notes (Original):
+
+Find and replace cutil_inline.h by helper_cuda.h in all C++ files.
+
+Find and replace cutilCheckMsg by getLastCudaError in all C++ files. The reason is in CUDA 5, the cutil library (which is not intended to be used outside NVIDIA SDK sample projects) has been re-organized in some helper classes.
+
+Add #include <helper_image.h> into include/cudaconv2/conv_util.cuh and include/nvmatrix/nvmatrix.cuh. This is for MIN and MAX macros.
+
+Optionally, you can change lines 30 to 34 of include/common/matrix.h to be like this:
+#ifdef NUMPY_INTERFACE
+#include <Python.h>
+#include <arrayobject.h>
+#endif
+#include <matrix_funcs.h>
+This is just to make sure Python.h is included first. However this is not mandatory.
+
+Copy common-gcc-cuda-4.0.mk and name it common-gcc-cuda-5.0.mk. Open the new file with your favorite editor and make some changes:
+On line 24:
+SM_VERSIONS   := 10 11 12 13 20 21 30 35
+Line 53, 54, 55:
+LIBDIR     := $(ROOTDIR)/lib
+COMMONDIR  := $(ROOTDIR)/samples/common
+SHAREDDIR  := $(ROOTDIR)
+Line 332 (just comment it):
+#LIB += -lcutil_$(LIB_ARCH)$(LIBSUFFIX) -lshrutil_$(LIB_ARCH)$(LIBSUFFIX)
+
+FOLLOWING may not be useful:
+Open cudamat_conv/Makefiles and make some changes:
+Line 19:
+GENCODE_ARCH := -gencode=arch=compute_20,code=\"sm_20,compute_20\" -gencode=arch=compute_30,code=\"sm_30,compute_30\"
+Line 30:
+include common-gcc-cuda-5.0.mk
+And the last step is to update paths specified in cudamat_conv/build.sh, like this:
+#!/bin/sh
+
+export CUDA_SDK_PATH=/usr/local/cuda-5.5/
+export CUDA_INSTALL_PATH=/usr/local/cuda-5.5/
+export PYTHON_INCLUDE_PATH=/usr/include/python2.7/
+export NUMPY_INCLUDE_PATH=/usr/include/python2.7/numpy/
+#export ATLAS_LIB_PATH=/usr/lib/atlas-base/atlas
+make $*
+
+LAST CHANGES:
+
+cutGetMaxGflopsDeviceId -> gpuGetMaxGflopsDeviceId
