@@ -486,26 +486,31 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
     Correctly sets up labels: multi word, single range, multiple...
     '''
     def get_labels_from_file(self, batch):
-        labels = batch['labels']
+        labels = batch['labels'] #label per image
         #print "\nDebug l ",len(labels)
         #print "DEBUG ",type(labels),',',type(labels[0]),',',self.multilabel
-        if not self.multilabel and type(labels[0])=='dict':#not self.flatlabels:
-            #print "not flat"
+        if not self.multilabel and type(labels[0])=='dict' and self.word!="":#not flatlabels:
+            #collect single value for chosen word: 
+            labelsMid = n.asarray([1 if (self.word in labels[i] and labels[i][self.word]>0) else 0 for i in range(0,len(labels))],dtype=n.uint8)
+            #assert labelsMid.shape==(len(labels),1), "Labels wrong shape "+str(labelsMid.shape) #Swap 1 and length?
+        elif not self.multilabel and type(labels[0])=='dict' and self.word=="":
+            # find first wordCount>0 and count as a one
+            # grab total dictionary
+            labelsMid = n.asarray([ self.batch_meta['label_names'].keys().index(labels[i][0]) for i in range(0,len(labels)) ], dtype=n.uint8)
+        elif not self.multilabel and type(labels[0])!='dict': #flatlabels:
             #collect single value for chosen word
-            listCountForWord = [labels[i][self.word] if self.word in labels[i] else -1 for i in range(0,len(labels))]
-            #now to change counts to labels (0->classes-1)
-            labelsMid = []
-            for i in range(0, len(listCountForWord)):
-                if listCountForWord[i]<=0:
-                    labelsMid.append(0)#hasn't word
-                else:
-                    labelsMid.append(1)#has word
-        if not self.multilabel and type(labels[0])!='dict': #self.flatlabels:
-            #collect single value for chosen word
-            #print "Flat"
-            #for item in labels:
-            #    print labels
             labelsMid = labels.astype(n.uint8)
+            #assert labelsMid.shape==(len(labels),1), "Labels wrong shape "+str(labelsMid.shape) #Swap 1 and length?
+        elif self.multilabel and type(labels[0])=='dict':
+            #possible issue: does each word's dictionary include only words it has, or all words?
+            print "ERROR: Unimplemented option \'multilabel\' with dictionary"
+            sys.exit(0)
+            #we have a dictionary of possible labels. At least one is "True", several could be: create array of num_classes where value is 1 or 0 for each
+            labelsMid = n.asarray([[1 if image[word]>0 else 0 for word in image.keys] for image in labels],dtype=n.uint8)
+            #assert labelsMid.shape==(len(labels), len(labels[0].keys)), "Labels wrong shape "+str(labelsMid.shape) #Swap 1 and length?
+        elif self.multilabel and type(labels[0])!='dict':
+            print "ERROR: Unimplemented option \'multilabel\' without dictionary"
+            sys.exit(0)
         else:
             #make up default labels...? failed to find them exit
             print "Failed to find labels from file "
