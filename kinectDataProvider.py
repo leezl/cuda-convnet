@@ -325,7 +325,7 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
     def get_data_dims(self, idx=0):
         #this does not include the batch size, just image/sample
         #well, 640x480x3 or 4, then X number of samples per batch...
-        if self.multilabel:
+        if self.multi_label:
             #print self.inner_size**2 * self.num_colors
             return self.final_size**2 * self.num_colors if idx == 0 else self.get_num_classes
         else:
@@ -346,7 +346,6 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
             self.streamer.begin_streaming()
         #get the batch
         (batchData, batchLabels) = self.streamer.get_next_batch()
-        #display_color(batchData[1][:,:,:3][:,:,::-1].astype(n.uint8))
         #scale depth down to similar range as rest of data...
         #so: # no done before mean subtraction, scale depth portion of mean too
         startTime = time.time()
@@ -411,6 +410,8 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         #print "getting patches of size ",resolution," from image ",image.shape
         #no patches here
         if image.shape[0]<resolution or image.shape[1]<resolution:
+            #
+            print "WARNING: RESOLUTION TOO Large"
             return [], []
         #check stride, reset if invalid
         if stride == -1:
@@ -459,14 +460,23 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         if crop == ():
             #no cropping: return patches everywhere IN, empty list for Patches OUT
             patchesIn, patchInLocs = self.multi_res_patches(image, resolution, stride)
-            return patchesIn, [], patchesInLoc, []
+            return patchesIn, patchesInLoc, [], []
         patchesIn, patchesInLoc = self.multi_res_patches(image[crop[0]:crop[2],crop[1]:crop[3],:])
+        patchesInLoc = [(loc[0]+crop[0],loc[1]+crop[1],loc[2]) for loc in patchesInLoc]
         if self.with_none_class:
+            #offset locations here
+            firstPatch, firstLoc = self.multi_res_patches(image[0:crop[0],0:image.shape[1],:])
+            secondPatch, secondLoc = self.multi_res_patches(image[crop[0]:crop[2],0:crop[1],:])
+            secondLoc = [(loc[0]+crop[0],loc[1],loc[2]) for loc in secondLoc]
+            thirdPatch, thirdLoc = self.multi_res_patches(image[crop[0]:crop[2],crop[3]:image.shape[1],:])
+            thirdLoc = [(loc[0]+crop[0],loc[1]+crop[3],loc[2]) for loc in thirdLoc]
+            fourthPatch, fourthLoc = self.multi_res_patches(image[crop[2]:image.shape[0],0:image.shape[1],:])
+            fourthLoc = [(loc[0]+crop[2],loc[1],loc[2]) for loc in fourthLoc]
             patchesOut, patchesOutLoc = zip(
-                                            list(self.multi_res_patches(image[0:crop[0],0:image.shape[1],:])),
-                                            list(self.multi_res_patches(image[crop[0]:crop[2],0:crop[1],:])),
-                                            list(self.multi_res_patches(image[crop[0]:crop[2],crop[3]:image.shape[1],:])),
-                                            list(self.multi_res_patches(image[crop[2]:image.shape[0],0:image.shape[1],:]))
+                                            list((firstPatch, firstLoc)),
+                                            list((secondPatch, secondLoc)),
+                                            list((thirdPatch, thirdLoc)),
+                                            list((fourthPatch, fourthLoc))
                                             )
             patchesOut = list(itertools.chain(*patchesOut))
             patchesOutLoc = list(itertools.chain(*patchesOutLoc))
@@ -486,39 +496,66 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
     Correctly sets up labels: multi word, single range, multiple...
     '''
     def get_labels_from_file(self, batch):
-        labels = batch['labels'] #label per image
-        #print "\nDebug l ",len(labels)
-        #print "DEBUG ",type(labels),',',type(labels[0]),',',self.multilabel
-        if not self.multilabel and type(labels[0])=='dict' and self.word!="":#not flatlabels:
-            #collect single value for chosen word: 
-            labelsMid = n.asarray([1 if (self.word in labels[i] and labels[i][self.word]>0) else 0 for i in range(0,len(labels))],dtype=n.uint8)
-            #assert labelsMid.shape==(len(labels),1), "Labels wrong shape "+str(labelsMid.shape) #Swap 1 and length?
-        elif not self.multilabel and type(labels[0])=='dict' and self.word=="":
-            # find first wordCount>0 and count as a one
-            # grab total dictionary
-            labelsMid = n.asarray([ self.batch_meta['label_names'].keys().index(labels[i][0]) for i in range(0,len(labels)) ], dtype=n.uint8)
-        elif not self.multilabel and type(labels[0])!='dict': #flatlabels:
-            #collect single value for chosen word
-            labelsMid = labels.astype(n.uint8)
-            #assert labelsMid.shape==(len(labels),1), "Labels wrong shape "+str(labelsMid.shape) #Swap 1 and length?
-        elif self.multilabel and type(labels[0])=='dict':
-            #possible issue: does each word's dictionary include only words it has, or all words?
-            print "ERROR: Unimplemented option \'multilabel\' with dictionary"
-            sys.exit(0)
-            #we have a dictionary of possible labels. At least one is "True", several could be: create array of num_classes where value is 1 or 0 for each
-            labelsMid = n.asarray([[1 if image[word]>0 else 0 for word in image.keys] for image in labels],dtype=n.uint8)
-            #assert labelsMid.shape==(len(labels), len(labels[0].keys)), "Labels wrong shape "+str(labelsMid.shape) #Swap 1 and length?
-        elif self.multilabel and type(labels[0])!='dict':
-            print "ERROR: Unimplemented option \'multilabel\' without dictionary"
-            sys.exit(0)
-        else:
-            #make up default labels...? failed to find them exit
-            print "Failed to find labels from file "
-            sys.exit(0)
-        #for label in labelsMid:
-        #    print type(label),',',label.dtype,',',type(self.get_num_classes())
-        #    print "What? ",label
-        #    assert label<self.get_num_classes(), "ERROR: Label out of range "+str(label)+'<'+str(self.get_num_classes())
+        labels = batch['labels']
+        if self.multi_label:
+            if type(labels[0])=='dict':
+                labelsMid = n.asarray( \
+                    [[1 if image[word]>0 else 0 for word in image.keys] for image in labels], \
+                    dtype=n.uint8)
+            elif type(labels[0])=='list':
+                labelsMid = n.asarray(labels, dtype=n.uint8)
+            else:#elif len(labels[0])==1:#type(labels[0])=='int':
+                #int should be index to class label
+                labelsMid = n.asarray( [[1 if i==item else 0 for i in range(0, len(self.batch_meta['label_names']))] \
+                                        for item in labels], dtype=n.uint8)
+            #else:
+            #    print "ERROR: unknown label type ",type(labels[0])
+            #    sys.exit(0)
+            # check that we have the correct number of labels for each item
+            assert labelsMid.shape[1] != len(self.batch_meta['label_names']), \
+                "Not the right number of labels for each item "+str(len(item))+", "+str(len(self.batch_meta['label_names']))
+        else: #single output
+            if type(labels[0])=='dict':
+                # This assumes we have a self.word
+                print "Warning: assuming we are looking at a single label, error may be thrown by net setup ",self.word
+                # if our network only produce isWord and isNotWord:
+                if len(self.batch_meta['label_names']) == 2:
+                    # then we can use self.word to find the label we need for the image
+                    labelsMid = n.asarray([1 if (self.word in labels[i] and labels[i][self.word]>0) \
+                                       else 0 for i in range(0,len(labels))],dtype=n.uint8)
+                elif all([len(item.keys())==1 for item in labels]):
+                    #only a single item in each dictionary: use to select label
+                    #results in either NONE label or label from dictionary
+                    labelsMid = n.asarray([len(self.batch_meta['label_names']) \
+                                           if (item.keys()[0] not in self.batch_meta['label_names']) \
+                                           else self.batch_meta['label_names'].index(item.keys()[0])])
+                else:
+                    # we have no way of knowing what single label we need here...
+                    print "ERROR: too many labels for single digit encoding"
+                    sys.exit(0)
+            elif type(labels[0])=='list':
+                labelsMid = []
+                for item in labels:
+                    #if one is 1 and length of list ==length of label_list, then use it as label
+                    assert len(item) == len(self.batch_meta['label_names']), \
+                        "Not the correct number of labels for our number of classes"
+                    count_non_zero = [1 if i>0 else 0 for i in item]
+                    assert sum(count_non_zero)==1, "More than one non-zero label "+str(item)
+                    # if we made it here then the single non-zero value is the label
+                    labelsMid.append(count_non_zero.index(1))
+                labelsMid = n.asarray(labelsMid, dtype=n.uint8)
+            else:#elif len(labels[0])==1:#elif type(labels[0])=='int':
+                #already correct form, check values: all less than len(label_list)
+                #check ==integer?
+                assert n.all(labels<len(self.batch_meta['label_names'])), "Label value out of range"
+                labelsMid = labels.astype(n.uint8)
+            #else:
+            #    print "ERROR: unknown label type ",type(labels[0])
+            #    sys.exit(0)
+        # check that we still ahve the correct number of labels
+        assert len(labelsMid) == len(labels), \
+            "The number of labels is wrong"
+        # 
         return labelsMid
 
     def get_crop_from_file(self, batch):#, data):
@@ -602,7 +639,6 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         origData = batch['data']
         #labels = batch['labels']
         #assert len(origData) == len(labels), "ERROR: Not the same number of labels and data in batch"
-        #display_color(origData[1][:,:,:3][:,:,::-1].astype(n.uint8))
         #need to parse thisBatch into proper format: pull out images and stack for training;
         #scale depth down to similar range as rest of data...
         #so: # no done before mean subtraction, scale depth portion of mean too
@@ -642,7 +678,7 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         ################TODO : if we are plotting we don't want this...
         print "Returning Batch"
         #self.debug_print(data, labels)
-        return (data, labels, locs), origData#[:,:,:,::-1]
+        return (data, labels, locs), batch['data']#[:,:,:,::-1]
 
     def pt_in_box(self, location, box):
         return (location[0]<box[2] and location[0]>box[0] and location[1]>box[1] and location[1]<box[3]) or \
@@ -741,7 +777,7 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
 
     def get_plottable_data(self, data):
         #this reshape may be wrong: check data order especially with depth info included TODO: alter for depth
-        #print "Plottable ",type(data), data.shape
+        print "Plottable ",type(data), data.shape
         data.astype(n.single)
         #problem adding mean back in...these training images are patches...
         if not self.subtract_mean_patch:
@@ -765,6 +801,7 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
     def get_plottable_data_what(self, data, image, locs):
         newForm = []
         for i in range(0, len(locs)): #zip(data, locs):
+            print "Locations of patches? ",locs[i]
             # grab patch from image, overwrite data[i]
             newForm.append(cv2.resize(n.require(image[locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:3], dtype=n.uint8), (self.final_size, self.final_size)))
         return n.asarray(newForm)
