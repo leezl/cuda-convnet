@@ -407,38 +407,79 @@ class ShowConvNet(ConvNet):
         #preds should now contain array patches*classes of probabilities
         #we want to collect these values into an image...
 
-        votingArray = create_voting_image(image_list[chosen_image_idx], data, locs)
+        # find the "best" overall prediction for each pixel
+        image_vote_mask = create_label_mask(image_list[chosen_image_idx].shape, data[0], locs, num_classes)
+        #display each label region in the image : this will be messy
+        display_each_label_region(image_list[chosen_image_idx], image_vote_mask, label_names)
 
+    def display_image(self, image, label):
+        #use matplotlib to display given image
         #following may not be necessary
         fig = pl.figure(3)
-        fig.text(.4, .95, '%s test case predictions' % ('Mistaken' if self.only_errors else 'Random'))
+        fig.text(.4, .95, '%s test case predictions' % (label))
 
-        #grabs the original patches
-        data[0] = self.test_data_provider.get_plottable_data_what(data[0], image_list[chosen_image_idx], locs)
-
-        #grab image that matches patches
-        # grab image, change type, cut depth, reverse bgr to rgb
-        img = ((image_list[chosen_image_idx].astype(n.uint8))[:,:,:3])[:,:,::-1]
         #show image (invisible otherwise?)
-        pl.imshow(img, interpolation='nearest')
+        pl.imshow(image, interpolation='nearest')
         #not showing labels for total image, so only NUM_ROWS, not *2
         pl.show()
         pl.clf()
 
-    def create_voting_image(self, image, data, locs):
+    # function to apply the mask to the image
+    def display_each_label_region(self, image, mask_image, label_names):
+        def my_mask(image, mask, i):
+            if mask == i:
+                return image
+            else:
+                return 0.0
+        #vectorize the above; seems this is faster than the numpy.mask stuff, which is meant for more complex stuff
+        vmaskfunc = n.vectorize(my_mask)
         # create an array representing the image: x*y*numClasses
-        votingArray = n.zeros(image.shape[0],image.shape[1], data[2].shape[1])
-        # for each patch, store the probabilities for all classes in their position (x, y, class)->(x+size, y+size, class)
-        print "Debug ", preds.shape
-        for i in range(0, len(locs)):
-            # create patches of correct size and shape where value equal probability from preds
-            patchVotes = n.asarray([n.ones((locs[i][2], locs[i][2]), dtype=n.single) * item for item in data[2][i]])
-            print patchVotes.shape,',',votingArray[locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:].shape
-            # update values in votingArray # need to pick combo operator...Add? max?
-            votingArray[locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:] = patchVotes
-        # combine them by...addition? largest? Try some, see what happens.
-        # find way to display this...? 
-        return votingArray
+        for i in range(0, 2):#len(label_names)):
+            #check if i is in our mask: display just that portion of the image/ outline...portion
+            if i in mask_image:
+                #mask out image where mask_imge != i
+                #currentMask = (mask_image == i)
+                #assert currentMask.shape == mask_image.shape, "Our mask is the wrong shape"
+                result = vmaskfunc(image, mask_image, i)
+                #display result labeled as correct class
+                display_image(result, label_names[i])
+
+    # takes image_shape, patches, locations
+    # returns the "mask"
+    def create_label_mask(self, image_shape, patches, locs, num_classes):
+        #
+        # create voting array for now (x, y, num_classes)
+        imageVote = n.zeros((image_shape[0],image_shape[1], num_classes), dtype=n.single)
+        counter = n.zeros((image_shape[0],image_shape[1], 1), dtype=n.single)
+        # create voting patches
+        votes = n.ones(patches.shape, dtype=n.single)
+        print patches.shape
+        for item,loc in zip(votes, locs):
+            item = item * n.random.random_sample((1,1,num_classes))
+            #check: votes[:,:,n] all values should be equal
+            for i in range(0, num_classes): #probably a faster way to do this...
+                assert n.all(item[:,:,i] == item[0,0,i]), "Probability not the same across patch for this class"
+            # assign probabilities in image voter
+            imageVote[loc[0]:loc[0]+loc[2],loc[1]:loc[1]+loc[2],:] = \
+                imageVote[loc[0]:loc[0]+loc[2],loc[1]:loc[1]+loc[2],:] + item
+            #add up how many patches we've counted at each location
+            counter[loc[0]:loc[0]+loc[2],loc[1]:loc[1]+loc[2],:] = \
+                counter[loc[0]:loc[0]+loc[2],loc[1]:loc[1]+loc[2],:] + 1.0
+        
+        # SO: we have a 
+        # * counter where each location is how many patches we've used at that location
+        # * image where each location is the probability sum across some number of patches...
+        # First Try: average: image / counter (broadcast across num_classes dimension)
+        imageAverage = n.divide(imageVote, counter)
+        assert imageAverage.shape == image.shape, "Shapes of image and average not correct: "+str(imageAverage.shape)
+        # * now image is probability per class...0-1, so we take the max and assign that index as the label
+        #imageMax = n.max(imageAverage, axis = 2) # gives us the max values, need indices of these...
+        imageMax = n.argmax(imageAverage, axis = 2)
+        assert imageMax.shape == (imageAverage.shape[0], imageAverage.shape[1]), \
+            "Shapes of final max and average not correct: "+str(imageMax.shape)
+        print imageMax.shape
+        #return the image of labels for each pixel
+        return imageMax
     
     #need alternate version of this for if the send-features is enabled
     def do_write_features(self):
