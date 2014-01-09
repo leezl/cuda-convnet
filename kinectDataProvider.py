@@ -801,9 +801,10 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
     def get_plottable_data_what(self, data, image, locs):
         newForm = []
         for i in range(0, len(locs)): #zip(data, locs):
-            print "Locations of patches? ",locs[i]
             # grab patch from image, overwrite data[i]
-            newForm.append(cv2.resize(n.require(image[locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:3], dtype=n.uint8), (self.final_size, self.final_size)))
+            #newForm.append(cv2.resize(n.require(image[locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:3], dtype=n.uint8), 
+            #    (self.final_size, self.final_size)))
+            newForm.append( n.require(image[locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:3], dtype=n.uint8) )
         return n.asarray(newForm)
 
 

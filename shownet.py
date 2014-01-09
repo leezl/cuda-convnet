@@ -393,7 +393,7 @@ class ShowConvNet(ConvNet):
         # find the "best" overall prediction for each pixel
         image_vote_mask = self.create_label_mask(image_list[chosen_image_idx].shape, data, locs, num_classes)
         #display each label region in the image : this will be messy
-        self.display_each_label_region(image_list[chosen_image_idx], image_vote_mask, label_names)
+        self.display_each_label_region(image_list[chosen_image_idx], image_vote_mask.reshape(image_vote_mask.shape[0],image_vote_mask.shape[1],1), label_names)
 
     def display_image(self, image, label):
         #use matplotlib to display given image
@@ -402,7 +402,7 @@ class ShowConvNet(ConvNet):
         fig.text(.4, .95, '%s test case predictions' % (label))
 
         #show image (invisible otherwise?)
-        pl.imshow(image, interpolation='nearest')
+        pl.imshow(image[:,:,:3].astype(n.uint8), interpolation='nearest')
         #not showing labels for total image, so only NUM_ROWS, not *2
         pl.show()
         pl.clf()
@@ -417,7 +417,7 @@ class ShowConvNet(ConvNet):
         #vectorize the above; seems this is faster than the numpy.mask stuff, which is meant for more complex stuff
         vmaskfunc = n.vectorize(my_mask)
         # create an array representing the image: x*y*numClasses
-        for i in range(0, 2):#len(label_names)):
+        for i in range(0, len(label_names)):
             #check if i is in our mask: display just that portion of the image/ outline...portion
             if i in mask_image:
                 #mask out image where mask_imge != i
@@ -433,12 +433,10 @@ class ShowConvNet(ConvNet):
         #
         # create voting array for now (x, y, num_classes)
         imageVote = n.zeros((image_shape[0],image_shape[1], num_classes), dtype=n.single)
-        counter = n.zeros((image_shape[0],image_shape[1], 1), dtype=n.single)
+        counter = n.ones((image_shape[0],image_shape[1], 1), dtype=n.single)
         # create voting patches
         votes = n.ones((data[0].shape[0],data[0].shape[1],data[0].shape[2],data[2].shape[1]), dtype=n.single)
-        print votes.shape,',',data[0].shape,',',type(data[2]),',',data[2].shape
-        for item,prediction,loc in zip(votes, data[2], locs):
-            print "Prediction shape ",prediction.shape,',',item.shape
+        for item, prediction, loc in zip(votes, data[2], locs):
             item = item * prediction.reshape((1,1,prediction.shape[0]))#n.random.random_sample((1,1,num_classes))
             #check: votes[:,:,n] all values should be equal
             for i in range(0, num_classes): #probably a faster way to do this...
@@ -455,12 +453,12 @@ class ShowConvNet(ConvNet):
         # * image where each location is the probability sum across some number of patches...
         # First Try: average: image / counter (broadcast across num_classes dimension)
         imageAverage = n.divide(imageVote, counter)
-        assert imageAverage.shape == image.shape, "Shapes of image and average not correct: "+str(imageAverage.shape)
+        #assert imageAverage.shape == image_shape, "Shapes of image and average not correct: "+str(imageAverage.shape)
         # * now image is probability per class...0-1, so we take the max and assign that index as the label
         #imageMax = n.max(imageAverage, axis = 2) # gives us the max values, need indices of these...
         imageMax = n.argmax(imageAverage, axis = 2)
-        assert imageMax.shape == (imageAverage.shape[0], imageAverage.shape[1]), \
-            "Shapes of final max and average not correct: "+str(imageMax.shape)
+        #assert imageMax.shape == (imageAverage.shape[0], imageAverage.shape[1]), \
+        #    "Shapes of final max and average not correct: "+str(imageMax.shape)
         print imageMax.shape
         #return the image of labels for each pixel
         return imageMax
