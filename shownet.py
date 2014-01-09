@@ -492,15 +492,18 @@ class ShowConvNet(ConvNet):
         self.op.print_values()
         if self.show_cost:
             self.plot_cost()
+            pl.show()
         if self.show_filters:
             self.plot_filters()
+            pl.show()
         if self.show_preds:
             self.plot_predictions()
+            pl.show()
         if self.show_preds_patch:
             self.plot_patch_predictions_total()
         if self.write_features:
             self.do_write_features()
-        pl.show()
+            pl.show()
         sys.exit(0)
             
     @classmethod
