@@ -271,17 +271,6 @@ class ShowConvNet(ConvNet):
 
         #print chosen_image_idx
         label_names = self.test_data_provider.batch_meta['label_names']
-        #for item in label_names:
-        #    print item
-        #print "DONE"
-        #if len(label_names)-1 in data[1]:
-        #    #print "NONE CLASS EXAMPLES"
-        #    #print type(data[1]), data[1].shape
-        #    #print list(data[1].flatten()).count(len(label_names)-1)
-        #    none_location = list(data[1].flatten()).index(len(label_names)-1)
-        #    #print locs[none_location]
-        #    whats = [location[3] for location in locs]
-        #print "Count image ",whats.count(chosen_image_idx)
 
         if self.only_errors:
             preds = n.zeros((data[0].shape[1], num_classes), dtype=n.single)
@@ -323,15 +312,7 @@ class ShowConvNet(ConvNet):
         #can we replace this? We have the full images, just grab the correct patches, no mean, no scaling, no drop out...
         #data[0] = self.test_data_provider.get_plottable_data(data[0])
         data[0] = self.test_data_provider.get_plottable_data_what(data[0], image_list[chosen_image_idx], locs)
-        #print len(locs)
-        #for i in range(0, len(locs)): #zip(data, locs):
-        #    # grab patch from image, overwrite data[i]
-        #    print image_list[chosen_image_idx][locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:].shape
-        #    print len(data),',',data[0].shape,',',type(data[0]),',',data[0][:,0].shape
-        #    data[0][:,i] = image_list[chosen_image_idx][locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:3]
 
-        #add large image to plot at beginning...or end?
-        #plot full image in 3x4 plot here
         #grab image that matches following patches
         # grab image, change type, cut depth, reverse bgr to rgb
         img = ((image_list[chosen_image_idx].astype(n.uint8))[:,:,:3])[:,:,::-1]
@@ -365,7 +346,6 @@ class ShowConvNet(ConvNet):
                 pl.yticks(ylocs + height/2, [l[1] for l in img_labels])
                 pl.xticks([width/2.0, width], ['50%', ''])
                 pl.ylim(0, ylocs[-1] + height*2)
-
     #reconstruct image? get whole image? should be returned separately?
     #currently returning the images and locs as well as patches and labels...
 
@@ -405,12 +385,15 @@ class ShowConvNet(ConvNet):
         self.libmodel.startFeatureWriter(data, self.sotmax_idx)
         self.finish_batch()
         #preds should now contain array patches*classes of probabilities
-        #we want to collect these values into an image...
+        #get original image data back
+        data[0] = self.test_data_provider.get_plottable_data_what(data[0], image_list[chosen_image_idx], locs)
+
+        # we need to hand patches where the values are the prediction values to create_label_mask
 
         # find the "best" overall prediction for each pixel
-        image_vote_mask = create_label_mask(image_list[chosen_image_idx].shape, data[0], locs, num_classes)
+        image_vote_mask = self.create_label_mask(image_list[chosen_image_idx].shape, data, locs, num_classes)
         #display each label region in the image : this will be messy
-        display_each_label_region(image_list[chosen_image_idx], image_vote_mask, label_names)
+        self.display_each_label_region(image_list[chosen_image_idx], image_vote_mask, label_names)
 
     def display_image(self, image, label):
         #use matplotlib to display given image
@@ -442,20 +425,21 @@ class ShowConvNet(ConvNet):
                 #assert currentMask.shape == mask_image.shape, "Our mask is the wrong shape"
                 result = vmaskfunc(image, mask_image, i)
                 #display result labeled as correct class
-                display_image(result, label_names[i])
+                self.display_image(result, label_names[i])
 
     # takes image_shape, patches, locations
     # returns the "mask"
-    def create_label_mask(self, image_shape, patches, locs, num_classes):
+    def create_label_mask(self, image_shape, data, locs, num_classes):
         #
         # create voting array for now (x, y, num_classes)
         imageVote = n.zeros((image_shape[0],image_shape[1], num_classes), dtype=n.single)
         counter = n.zeros((image_shape[0],image_shape[1], 1), dtype=n.single)
         # create voting patches
-        votes = n.ones(patches.shape, dtype=n.single)
-        print patches.shape
-        for item,loc in zip(votes, locs):
-            item = item * n.random.random_sample((1,1,num_classes))
+        votes = n.ones((data[0].shape[0],data[0].shape[1],data[0].shape[2],data[2].shape[1]), dtype=n.single)
+        print votes.shape,',',data[0].shape,',',type(data[2]),',',data[2].shape
+        for item,prediction,loc in zip(votes, data[2], locs):
+            print "Prediction shape ",prediction.shape,',',item.shape
+            item = item * prediction.reshape((1,1,prediction.shape[0]))#n.random.random_sample((1,1,num_classes))
             #check: votes[:,:,n] all values should be equal
             for i in range(0, num_classes): #probably a faster way to do this...
                 assert n.all(item[:,:,i] == item[0,0,i]), "Probability not the same across patch for this class"
@@ -515,7 +499,7 @@ class ShowConvNet(ConvNet):
         if self.show_preds:
             self.plot_predictions()
         if self.show_preds_patch:
-            self.plot_patch_predictions()
+            self.plot_patch_predictions_total()
         if self.write_features:
             self.do_write_features()
         pl.show()
