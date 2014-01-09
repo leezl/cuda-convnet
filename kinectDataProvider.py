@@ -412,6 +412,7 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         if image.shape[0]<resolution or image.shape[1]<resolution:
             #
             print "WARNING: RESOLUTION TOO Large"
+            #widenCrop()? need full image
             return [], []
         #check stride, reset if invalid
         if stride == -1:
@@ -804,7 +805,7 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
             # grab patch from image, overwrite data[i]
             #newForm.append(cv2.resize(n.require(image[locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:3], dtype=n.uint8), 
             #    (self.final_size, self.final_size)))
-            newForm.append( n.require(image[locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:3], dtype=n.uint8) )
+            newForm.append( n.require((image[locs[i][0]:locs[i][0]+locs[i][2],locs[i][1]:locs[i][1]+locs[i][2],:3]), dtype=n.uint8) )
         return n.asarray(newForm)
 
 

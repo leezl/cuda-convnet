@@ -48,7 +48,7 @@ class ShowConvNet(ConvNet):
         ConvNet.__init__(self, op, load_dic)
     
     def get_gpus(self):
-        self.need_gpu = self.op.get_value('show_preds') or self.op.get_value('write_features') or self.op.get_value('show_preds_patch')
+        self.need_gpu = self.op.get_value('show_preds') or self.op.get_value('write_features') or self.op.get_value('write_features_stream') or self.op.get_value('show_preds_patch')
         if self.need_gpu:
             ConvNet.get_gpus(self)
     
@@ -73,6 +73,8 @@ class ShowConvNet(ConvNet):
             self.sotmax_idx = self.get_layer_idx(self.op.get_value('show_preds_patch'), check_type='softmax')
         if self.op.get_value('write_features'):
             self.ftr_layer_idx = self.get_layer_idx(self.op.get_value('write_features'))
+        if self.op.get_value('write_features_stream'):
+            self.ftr_layer_idx = self.get_layer_idx(self.op.get_value('write_features_stream'))
             
     def init_model_lib(self):
         if self.need_gpu:
@@ -271,6 +273,8 @@ class ShowConvNet(ConvNet):
 
         #print chosen_image_idx
         label_names = self.test_data_provider.batch_meta['label_names']
+        for item in label_names:
+            print "Label ",item
 
         if self.only_errors:
             preds = n.zeros((data[0].shape[1], num_classes), dtype=n.single)
@@ -322,6 +326,8 @@ class ShowConvNet(ConvNet):
         pl.show()
         pl.clf()
 
+        print "DEBUG ",NUM_ROWS,',',NUM_COLS
+
         for row in xrange(NUM_ROWS):#3 for full size image
             for c in xrange(NUM_COLS):
                 img_idx = row * NUM_COLS + c
@@ -346,8 +352,6 @@ class ShowConvNet(ConvNet):
                 pl.yticks(ylocs + height/2, [l[1] for l in img_labels])
                 pl.xticks([width/2.0, width], ['50%', ''])
                 pl.ylim(0, ylocs[-1] + height*2)
-    #reconstruct image? get whole image? should be returned separately?
-    #currently returning the images and locs as well as patches and labels...
 
     '''
     Use this function to work on overall prediction: ignore low probability, combine probabilities for patches
@@ -388,8 +392,6 @@ class ShowConvNet(ConvNet):
         #get original image data back
         data[0] = self.test_data_provider.get_plottable_data_what(data[0], image_list[chosen_image_idx], locs)
 
-        # we need to hand patches where the values are the prediction values to create_label_mask
-
         # find the "best" overall prediction for each pixel
         image_vote_mask = self.create_label_mask(image_list[chosen_image_idx].shape, data, locs, num_classes)
         #display each label region in the image : this will be messy
@@ -398,14 +400,15 @@ class ShowConvNet(ConvNet):
     def display_image(self, image, label):
         #use matplotlib to display given image
         #following may not be necessary
+        print "Displaying one of the test labels "
         fig = pl.figure(3)
         fig.text(.4, .95, '%s test case predictions' % (label))
 
         #show image (invisible otherwise?)
-        pl.imshow(image[:,:,:3].astype(n.uint8), interpolation='nearest')
+        pl.imshow(image[:,:,:3].astype(n.uint8)[:,:,::-1], interpolation='nearest')
         #not showing labels for total image, so only NUM_ROWS, not *2
         pl.show()
-        pl.clf()
+        #pl.clf()
 
     # function to apply the mask to the image
     def display_each_label_region(self, image, mask_image, label_names):
@@ -486,6 +489,28 @@ class ShowConvNet(ConvNet):
                 break
         pickle(os.path.join(self.feature_path, 'batches.meta'), {'source_model':self.load_file,
                                                                  'num_vis':num_ftrs})
+
+    #need alternate version of this for if the send-features is enabled
+    def do_write_features_stream(self):
+        if not self.test_from_camera:
+            print "Error: this option requires camera streaming"
+        next_data = self.get_next_batch(train=False)
+        num_ftrs = self.layers[self.ftr_layer_idx]['outputs']
+        while True:
+            batch = next_data[1]
+            data = next_data[2]
+            ftrs = n.zeros((data[0].shape[1], num_ftrs), dtype=n.single)
+            self.libmodel.startFeatureWriter(data + [ftrs], self.ftr_layer_idx)
+            
+            # load the next batch while the current one is computing
+            next_data = self.get_next_batch(train=False)
+            self.finish_batch()
+            #path_out = os.path.join(self.feature_path, 'data_batch_%d' % batch)
+            print "features ",len(ftrs),',',len(data[1])
+            #pickle(path_out, {'data': ftrs, 'labels': data[1]})
+            print "Wrote feature file"
+        #pickle(os.path.join(self.feature_path, 'batches.meta'), {'source_model':self.load_file,
+        #                                                         'num_vis':num_ftrs})
            
     #need to alter following to be continuous, not one go?     
     def start(self):
@@ -500,9 +525,15 @@ class ShowConvNet(ConvNet):
             self.plot_predictions()
             pl.show()
         if self.show_preds_patch:
+            self.plot_patch_predictions()
+            pl.show()
+        if self.show_preds_patch_total:
             self.plot_patch_predictions_total()
         if self.write_features:
             self.do_write_features()
+            pl.show()
+        if self.write_features_stream:
+            self.do_write_features_stream()
             pl.show()
         sys.exit(0)
             
@@ -525,6 +556,8 @@ class ShowConvNet(ConvNet):
         op.add_option("feature-path", "feature_path", StringOptionParser, "Write test data features to this path (to be used with --write-features)", default="")
         #add options here for streaming from the camera: send the results rather then save to file?
         op.add_option("show-preds-patch","show_preds_patch", StringOptionParser, "Show patch predictions made by given softmax on test set", default="")
+        op.add_option("show-preds-patch-total","show_preds_patch_total", StringOptionParser, "Show patch predictions made by given softmax on test set in total image", default="")
+        op.add_option("write-features-stream", "write_features_stream", StringOptionParser, "Stream test data features from given layer", default="", requires=['cam_test'])
         op.add_option("cam-test", "test_from_camera", BooleanOptionParser, "Get Test Batches from OpenNI Device?", default=0)#0? can i leave it False?
         #op.add_option("send-features", "send_features", StringOptionParser, "Send the test data features (probabilities) from given layer", default="", requires=['receiver-path'])
         #op.add_option("receiver-path", "receiver_path", StringOptionParser, "Send test data features to this (address?) (use with --send-features)", default="")
