@@ -1,11 +1,10 @@
-
 Cuda-Convnet with Kinect
 ====================================
 
 This project is based off of the one here:    
 https://code.google.com/p/cuda-convnet/    
 
-Our goal is to alter this project to remove the python code and replace it with a system that grabs images from a Kinect and runs on them instead.    
+Our goal is to alter this project to grab images from a Kinect and run on them instead. Which works, but is not fast enough for me.    
 
 The openni files cluttering this directory had to be located here since the python openni extension searches for them here, in spite of the fact that I added openni to the paths of my computer. Perhaps this is fixable, perhaps not.
 
