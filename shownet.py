@@ -23,7 +23,7 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import numpy
-import sys
+import sys, time
 import getopt as opt
 from util import *
 from math import sqrt, ceil, floor
@@ -303,8 +303,10 @@ class ShowConvNet(ConvNet):
         #data = [data, labels, preds]
 
         # Run the model
+        startRun = time.time()
         self.libmodel.startFeatureWriter(data, self.sotmax_idx)
         self.finish_batch()
+        print "Run time: ",time.time()-startRun
         
         fig = pl.figure(3)
         fig.text(.4, .95, '%s test case predictions' % ('Mistaken' if self.only_errors else 'Random'))
@@ -497,6 +499,7 @@ class ShowConvNet(ConvNet):
         next_data = self.get_next_batch(train=False)
         num_ftrs = self.layers[self.ftr_layer_idx]['outputs']
         while True:
+            startTime = time.time()
             batch = next_data[1]
             data = next_data[2]
             ftrs = n.zeros((data[0].shape[1], num_ftrs), dtype=n.single)
@@ -509,6 +512,8 @@ class ShowConvNet(ConvNet):
             print "features ",len(ftrs),',',len(data[1])
             #pickle(path_out, {'data': ftrs, 'labels': data[1]})
             print "Wrote feature file"
+            endTime = time.time()
+            print "Time for frame: ",endTime-startTime
         #pickle(os.path.join(self.feature_path, 'batches.meta'), {'source_model':self.load_file,
         #                                                         'num_vis':num_ftrs})
            
@@ -571,7 +576,9 @@ if __name__ == "__main__":
         op = ShowConvNet.get_options_parser()
         op, load_dic = IGPUModel.parse_options(op)
         model = ShowConvNet(op, load_dic)
+        startTime = time.time()
         model.start()
+        endTime = time.time()
     except (UnpickleError, ShowNetError, opt.GetoptError), e:
         print "----------------"
         print "Error:"

@@ -152,7 +152,7 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         self.crop_general = False        #probably a bad idea, always False
         self.with_none_class = True     #probably a good idea, needs further testing
         self.max_batch = 14000           #may be uneccessary but a good idea for consistent timing...
-        print "Output size",len(self.batch_meta['label_names'])
+        #print "Output size",len(self.batch_meta['label_names'])
 
         #add NONE label if it does not exist
         if self.with_none_class and not 'NONE' in self.batch_meta['label_names']:
@@ -162,7 +162,7 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         #for item in self.batch_meta['label_names']:
         #    print item
 
-        self.batchSize = 30#48 # hard coded from data for now
+        self.batchSize = 3#48 # hard coded from data for now
         self.scale = 1.0 #0.5 # hard code scaling of the images...
         #self.final_size = 4
         #storage for multiple resolution selections
@@ -290,26 +290,26 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
             data = data[:self.max_batch]
             labels = labels[:self.max_batch]
             locs = locs[:self.max_batch]
-        print "Cutting batch ",time.time()-startTime
+        #print "Cutting batch ",time.time()-startTime
         #dropout: 20% pixels zeroed?
         startTime = time.time()
         if self.use_drop_out:
             data = self.drop_out(data)
-        print "Drop Out ",time.time()-startTime
+        #print "Drop Out ",time.time()-startTime
         #print " \nType and shape ",type(data),' ',len(data),' ',type(data[0]), data[0].shape, ',',data[0].dtype
         imageTest = n.copy(data[0])
         #flattened and each channel in order...
         startTime = time.time()
         data = n.asarray([(sample.astype(n.float32, order='C').swapaxes(0,1)).flatten('F') for sample in data])#flatten data, keep channels in order
         labels = n.asarray(labels)#[label for label in labels]
-        print "Reshaping data 1 ",time.time()-startTime
+        #print "Reshaping data 1 ",time.time()-startTime
         #assert data.shape[1] == (self.final_size * self.final_size * self.num_colors), "Data for next batch is not the correct shape "+str(data.shape)
         #print "Batch dims: ",data.shape,',',labels.shape
         #need to flatten the data and swap axis order: data x numSamples
         startTime = time.time()
         data = n.require(n.swapaxes(data, 0, 1), dtype=n.single, requirements='C')#n.swapaxes(data.astype(n.float32, order='C'), 0, 1)
         labels = n.require(n.swapaxes(labels.reshape(labels.shape[0],1), 0, 1), dtype=n.single, requirements='C')#n.swapaxes(labels.astype(n.float32, order='C').reshape(labels.shape[0],1), 0, 1)
-        print "Reshaping data 2 ",time.time()-startTime
+        #print "Reshaping data 2 ",time.time()-startTime
         #print " \nType and shape ",type(data),' ',data.shape,' ',type(data[0]), data[0].shape, ',',data[0].dtype
         #print "Fixed Batch dims: ",data.shape,',',labels.shape
         #print imageTest[:,:,0]
@@ -319,7 +319,7 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         #assert round(imageTest[0,1,0]-data[1,0], 4)==0, "Channels swapped order? "+str(imageTest[0,1,0])+','+str(data[1,0])
         #print type(data[0]),',',type(labels[0])
         #print data[0].shape,',',labels[0].shape
-        print "Handing off data "
+        #print "Handing off data "
         return epoch, batchnum, [data, labels], locs, images ###recon flag? [0]==epoch, [1]==batchnum, [2]==[data,labels], [3]==locs
 
     def get_data_dims(self, idx=0):
@@ -359,14 +359,14 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
             #scaled_depth = np.round(255.0 * (depth - minVal) / (maxVal - minVal - 1.0))
             #batchData[:,:,:,3] = n.round(255.0 * (batchData[:,:,:,3] - minVal) / (maxVal - minVal - 1.0))
             batchData[:,:,:,3] = n.round(255.0 * (batchData[:,:,:,3] - minVal) / (9870.0 - minVal - 1.0))
-        print "scaling depth: ",time.time()-startTime
+        #print "scaling depth: ",time.time()-startTime
         #have full images, subtract mean
         startTime= time.time()
         if not self.subtract_mean_patch:
             fixed_batch_data  = [image-self.data_mean for image in batchData]
         else:
             fixed_batch_data = batchData
-        print "remove mean total: ",time.time()-startTime
+        #print "remove mean total: ",time.time()-startTime
         #now: do any cropping and scaling
         #grab self.inner_size x self.inner_size throughout images
         cropped_batch_data = []
@@ -381,7 +381,7 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
             cropped_batch_locations = cropped_batch_locations + locations
             #extend label by length of patches (label for image applies to each patch from image (Maybe))
             cropped_batch_labels = cropped_batch_labels + [batchLabels[i] for j in range(0, len(patches))]
-        print "making patches: ",time.time()-startTime
+        #print "making patches: ",time.time()-startTime
         #many more now throughtout image...but: debug check here
         #assert len(cropped_batch_data) == len(cropped_batch_labels), \
         #    "Not the same number of samples and labels "+str(len(cropped_batch_data))+','+str(len(cropped_batch_labels))
@@ -391,8 +391,8 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
             #assert type(cropped_batch_data[0]) == type(self.mean_patch), "Mean patch and image patch have different types "+str(type(cropped_batch_data[0]))+","+str(type(self.mean_patch))
             #assert cropped_batch_data[0].shape == self.mean_patch.shape, "Mean patch is different shape than the image patches "+str(self.mean_patch.shape)+","+str(cropped_batch_data[0].shape)
             cropped_batch_data = [item-self.mean_patch for item in cropped_batch_data]
-        print "remove mean patch: ",time.time()-startTime
-        print "returning camera batch"
+        #print "remove mean patch: ",time.time()-startTime
+        #print "returning camera batch"
         #just return
         return (cropped_batch_data, cropped_batch_labels, cropped_batch_locations), batchData
 

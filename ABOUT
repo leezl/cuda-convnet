@@ -1,3 +1,6 @@
+
+Too slow: .35 seconds per frame to grab from camera, subtract mean, collect patches and flatten for processing. Even pipelinging these steps is unlikely to improve performance. Try: having the camera thread do some processing: subtract mean and create patches? still not likely to improve, since python, and threading in python isn't actually using multiple processors (right?)
+
 cuda-convnet
 High-performance C++/CUDA implementation of abstract convolutional neural networks
 
