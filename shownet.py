@@ -48,7 +48,8 @@ class ShowConvNet(ConvNet):
         ConvNet.__init__(self, op, load_dic)
     
     def get_gpus(self):
-        self.need_gpu = self.op.get_value('show_preds') or self.op.get_value('write_features') or self.op.get_value('write_features_stream') or self.op.get_value('show_preds_patch')
+        self.need_gpu = self.op.get_value('show_preds') or self.op.get_value('write_features') or self.op.get_value('write_features_stream') \
+            or self.op.get_value('show_preds_patch') or self.op.get_value('show_preds_patch_total')
         if self.need_gpu:
             ConvNet.get_gpus(self)
     
@@ -71,6 +72,8 @@ class ShowConvNet(ConvNet):
             self.sotmax_idx = self.get_layer_idx(self.op.get_value('show_preds'), check_type='softmax')
         if self.op.get_value('show_preds_patch'):
             self.sotmax_idx = self.get_layer_idx(self.op.get_value('show_preds_patch'), check_type='softmax')
+        if self.op.get_value('show_preds_patch_total'):
+            self.sotmax_idx = self.get_layer_idx(self.op.get_value('show_preds_patch_total'), check_type='softmax')
         if self.op.get_value('write_features'):
             self.ftr_layer_idx = self.get_layer_idx(self.op.get_value('write_features'))
         if self.op.get_value('write_features_stream'):
@@ -338,7 +341,7 @@ class ShowConvNet(ConvNet):
                 pl.subplot(NUM_ROWS*2, NUM_COLS, row * 2 * NUM_COLS + c + 1)
                 pl.xticks([])
                 pl.yticks([])
-                img = data[0][img_idx,:,:,:]
+                img = data[0][img_idx,:,:,:][:,:,::-1]
                 pl.imshow(img, interpolation='nearest')
                 true_label = int(data[1][0,img_idx])
 
