@@ -22,9 +22,9 @@ Strange Issues:
 =====================
 OpenNI and Python:
     *Color Streams appear strange if they are stopped, and then restarted.   
-    *Color and Depth Syncing is cannot be activated   
-        -> the function takes no parameters, but complains in the OpenNI code that a aparameter is wrong   
-    *Color and Depth can be read at the same time in Quarter size, (320,240, :), or if depth is (640, 480, 1), but not if color is (640, 480, 3), regardless of what depth is. Note: Color can be read at this size by itself. This only happens on certain computers.   
+    *Color and Depth Syncing cannot be activated   
+        -> the function takes no parameters, but complains in the OpenNI code that a parameter is wrong   
+    *On certain computers: Color and Depth can be read at the same time in Quarter size, (320,240, :), or if depth is (640, 480, 1), but not if color is (640, 480, 3), regardless of what depth is. Note: Color can be read at this size by itself.
 
 
 NOTES
