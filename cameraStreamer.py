@@ -63,7 +63,7 @@ class CameraStreamer:
         syncing,
         registration, (currently broken)
     '''
-    def __init__(self, batchSize, size='full', max_lag=2, max_size=40, wait_time=0.0, with_depth=True):
+    def __init__(self, batchSize, size='full', max_lag=2, max_size=40, wait_time=0.0, with_depth=True, mean_img=None):
         #storage for our frames from the camera
         self.batchQueue = Queue.Queue() #queue or list as queue? need threads? locks? to grab more then one item?
         #how far behind is the calling program allowed to be in batches (we can have x batches stashed before we start dropping them)
@@ -83,6 +83,8 @@ class CameraStreamer:
         #depth type:
         self.depth_type = c_api.OniPixelFormat.ONI_PIXEL_FORMAT_DEPTH_1_MM
         self.color_type = c_api.OniPixelFormat.ONI_PIXEL_FORMAT_RGB888#ONI_PIXEL_FORMAT_JPEG
+        if mean_img:
+            self.mean_img=mean_img
         #self.depth_type = ONI_PIXEL_FORMAT_DEPTH_100_UM
         #only using quarter or full size of the standard resolution
         if size =='quarter':

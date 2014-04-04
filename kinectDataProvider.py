@@ -196,18 +196,7 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
             #cutting out depth
             if not self.with_depth:
                 self.full_img_size[2] = (self.full_img_size[0], self.full_img_size[1], self.full_img_size[2]-1)
-        #Can we be sure labeled thing is in all of these? depends entirely on size, postion etc...
-        if self.with_depth:
-            self.num_colors = 4 #assume depth here? read from training?
-        else:
-            self.num_colors = 3
-        if self.test and self.test_from_camera:
-            if self.full_resolution:
-                self.streamer = CameraStreamer(self.batchSize, size='full', with_depth=self.with_depth, max_size=self.batchSize)#batch_size gotten from batches.meta?
-            else:
-                self.streamer = CameraStreamer(self.batchSize, size='quarter', with_depth=self.with_depth, max_size=self.batchSize)
 
-        #why are the means ordered this way in cifar? channels then shape?
         #mean is very troubling: want patches, but need to be able to - and add mean...
         if self.with_depth:
             self.data_mean = self.batch_meta['data_mean']#.reshape((self.full_img_size))
@@ -218,6 +207,19 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
                 self.data_mean[:,:,3] = n.round(255.0 * (self.data_mean[:,:,3] - minVal) / (maxVal - minVal - 1.0))
         else:
             self.data_mean = self.batch_meta['data_mean'][:,:,:3]
+
+        #Can we be sure labeled thing is in all of these? depends entirely on size, postion etc...
+        if self.with_depth:
+            self.num_colors = 4 #assume depth here? read from training?
+        else:
+            self.num_colors = 3
+        if self.test and self.test_from_camera:
+            if self.full_resolution:
+                self.streamer = CameraStreamer(self.batchSize, size='full', with_depth=self.with_depth, max_size=self.batchSize, mean_img=self.data_mean)#batch_size gotten from batches.meta?
+            else:
+                self.streamer = CameraStreamer(self.batchSize, size='quarter', with_depth=self.with_depth, max_size=self.batchSize, mean_img=self.data_mean)
+
+
         #deconstruct mean for adding back in? tedious patches...
         patches, locs = self.multi_res_patches(self.data_mean)
         self.mean_patch = n.mean((patches), axis=0)#across images (each pixel channel has mean)
