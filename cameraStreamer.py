@@ -379,13 +379,35 @@ class CameraStreamer:
             colorData = (CameraStreamer.reshape(colorData))[:,:,::-1]
             #stack to form main image
             total = n.dstack((colorData, depthData))
-            #Move functionality from get_batch_from_camera in data provider here...
+            #Move functionality from get_batch_from_camera in data provider here...(scale, mean, and patch)
 
             #scale depth if being used down to same scale as rest of data
+            #or scale color data up...? TEST
+            #
+            '''
+            #scale the last dimension of every sample to be 0-255
+            minVal = 0.0
+            maxVal = 9870.0 #batchData[:,:,:,3].max()#max across all depth: this is temp est
+            #assert maxVal==9870, "Max changed "+str(maxVal)+','+str(9870)
+            #if maxVal!=9870.0:
+            #    print "Max value varies ",maxVal,',',9870.0
+            #scaled_depth = np.round(255.0 * (depth - minVal) / (maxVal - minVal - 1.0))
+            #batchData[:,:,:,3] = n.round(255.0 * (batchData[:,:,:,3] - minVal) / (maxVal - minVal - 1.0))
+            total[:,:,:,3] = n.round(255.0 * (total[:,:,:,3] - minVal) / (9870.0 - minVal - 1.0))
+            '''
+            '''
+            #scale the first 3 dimensions to be 0-9870
+            minVal = 0.0
+            maxVal = 255.0
+            total[:,:,:,0:3] = n.round(maxVal * (total[:,:,:,0:3] - minVal) / (255.0.0 - minVal - 1.0))
+            '''
 
             #subtract total mean if set #requires access to total mean image
+            #fixed_batch_data  = [image-self.mean_img for image in batchData]
+            total = total-self.mean_img
 
             #grab patches #requires access to resolutions used to make patches
+            #patches, locations = self.multi_res_patches(image)
 
             #subtract mean patch #requires mean patch
 
