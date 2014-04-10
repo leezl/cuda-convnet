@@ -19,6 +19,18 @@ python convnet.py --data-path=data/pickledGZip --save-path=storage/tmpKinect/Wit
 
 python convnet.py --data-path=data/pickledGZipLab --save-path=storage/tmpKinect/WithDepth/WithDropOut/v2 --test-range=181-227 --train-range=0-180 --layer-def=./example-layers/layers-FirstTestWithDepthv2.cfg --layer-params=./example-layers/layer-params-FirstTestWithDepthv2.cfg --data-provider=kinect --test-freq=181 --with-depth=1 --test-one=0
 
+
+//HMMM
+python convnet.py --data-path=data/pickledGZipLabv3 --save-path=storage/tmpKinect/WithDepth/WithDropOut/v3 --test-range=181-211 --train-range=0-180 --layer-def=./example-layers/layers-FirstTestWithDepthv2.cfg --layer-params=./example-layers/layer-params-FirstTestWithDepthv2.cfg --data-provider=kinect --test-freq=5 --with-depth=1 --test-one=0
+
+python convnet.py -f storage/tmpKinect/WithDepth/WithDropOut/v3/ConvNet__2014-04-05_18.52.35
+
+python shownet.py -f storage/tmpKinect/WithDepth/WithDropOut/v3/ConvNet__2014-04-05_18.52.35/ --show-cost=logprob --cost-idx=1
+python shownet.py -f storage/tmpKinect/WithDepth/WithDropOut/v3/ConvNet__2014-04-05_18.52.35/ --show-preds-patch=probs
+python shownet.py -f storage/tmpKinect/WithDepth/WithDropOut/v3/ConvNet__2014-04-05_18.52.35/ --show-preds-patch=probs --cam-test=1
+python shownet.py -f storage/tmpKinect/WithDepth/WithDropOut/v3/ConvNet__2014-04-05_18.52.35/ --show-preds-patch-total=probs
+
+
 //to continue training
 python convnet.py -f storage/tmpKinect/WithDepth/v1/ConvNet__2013-12-10_09.16.39
 

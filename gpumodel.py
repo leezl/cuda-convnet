@@ -152,7 +152,7 @@ class IGPUModel:
         print "========================="
         #gets locs from kinect data provider here..
         next_data = self.get_next_batch()
-        #TODO add early stopping condition here: or blah
+        #adds early stopping condition here: or blah
         while self.epoch <= self.num_epochs:
             data = next_data
             self.epoch, self.batchnum = data[0], data[1]

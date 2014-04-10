@@ -83,7 +83,7 @@ class CameraStreamer:
         #depth type:
         self.depth_type = c_api.OniPixelFormat.ONI_PIXEL_FORMAT_DEPTH_1_MM
         self.color_type = c_api.OniPixelFormat.ONI_PIXEL_FORMAT_RGB888#ONI_PIXEL_FORMAT_JPEG
-        if mean_img:
+        if mean_img != None:
             self.mean_img=mean_img
         #self.depth_type = ONI_PIXEL_FORMAT_DEPTH_100_UM
         #only using quarter or full size of the standard resolution

@@ -22,6 +22,7 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import unittest
 import numpy
 import sys, time
 import getopt as opt
@@ -363,7 +364,6 @@ class ShowConvNet(ConvNet):
     '''
     def plot_patch_predictions_total(self):
         #locations: (x,y,res,imgidx), images[imgidx]
-        #currently identical to above, needs altering...
         stuff = self.get_next_batch(train=False)
         data = stuff[2] # get a test batch # data, labels
         locs = n.asarray(stuff[3]) # (upperleftx, upperlefty, size, imgidx)
@@ -397,8 +397,19 @@ class ShowConvNet(ConvNet):
         #get original image data back
         data[0] = self.test_data_provider.get_plottable_data_what(data[0], image_list[chosen_image_idx], locs)
 
+
+        print "How many ", type(data),',',len(data),',',data[0].shape,',',data[1].shape,',',data[2].shape
+        for item in range(0,data[0].shape[0]):
+            print data[1][:,item],',',n.argmax(data[2][item])
+            okhmm = self.test_data_provider.batch_meta['label_names'][int(data[1][:,item])]
+            predhmm = self.test_data_provider.batch_meta['label_names'][int(n.argmax(data[2][item]))]
+            print "Equal? => ",okhmm,',',predhmm
+            if okhmm != 'NONE':
+                self.display_image(data[0][item], okhmm)
+
+
         # find the "best" overall prediction for each pixel
-        image_vote_mask = self.create_label_mask(image_list[chosen_image_idx].shape, data, locs, num_classes)
+        image_vote_mask = self.create_label_mask_v2(image_list[chosen_image_idx].shape, data, locs, num_classes)
         #display each label region in the image : this will be messy
         self.display_each_label_region(image_list[chosen_image_idx], image_vote_mask.reshape(image_vote_mask.shape[0],image_vote_mask.shape[1],1), label_names)
 
@@ -468,6 +479,52 @@ class ShowConvNet(ConvNet):
         #assert imageMax.shape == (imageAverage.shape[0], imageAverage.shape[1]), \
         #    "Shapes of final max and average not correct: "+str(imageMax.shape)
         print imageMax.shape
+        #return the image of labels for each pixel
+        return imageMax
+
+    def create_label_mask_v2(self, image_shape, data, locs, num_classes):
+        #
+        # create voting array for now (x, y, num_classes)
+        # stores the count of votes for each class (ie how many times was that class the max prob)
+        imageVote = n.zeros((image_shape[0],image_shape[1], num_classes), dtype=n.single)
+        #print "imageVote ",imageVote.shape # (480, 640, 29)
+        # counts how many patches have voted at each location
+        counter = n.ones((image_shape[0],image_shape[1], 1), dtype=n.single)
+        #print "counter ",counter.shape # (480, 640, 1)
+        # create voting patches
+        # This is just a temp patch to help create the probability patches
+        votes = n.ones((data[0].shape[1],data[0].shape[2],data[2].shape[1]), dtype=n.single)
+        #print "Votes shape ",votes.shape # (11, 96, 96, 29)
+        assert len(data[2]) == len(locs), "Location and predicitons dont match up "+str(len(data[2]))+','+str(len(locs))
+        #print "data[2] shape ", data[2].shape
+        #print "locs shape ", locs.shape
+        for i, (prediction, loc) in enumerate(zip(data[2], locs)): #for each of the patches and its location
+            #print "Prediction shape ",prediction.shape # (29,)
+            item = votes * prediction.reshape((1,1,prediction.shape[0]))#n.random.random_sample((1,1,num_classes))
+            #print "Shape of the prediciton patch ",item.shape # (31, 96, 96, 29)
+            #check: votes[:,:,n] all values should be equal
+            for i in range(0, num_classes): #probably a faster way to do this...
+                assert n.all(item[:,:,i] == item[0,0,i]), "Probability not the same across patch for this class"
+                #assertAlmostEqual(n.all(item[0,0,i]), prediction[i], msg="Prediction value has changed "+str(prediction[i])+','+str(item[0,0,i]))
+            # assign probabilities in image voter
+            imageVote[loc[0]:loc[0]+loc[2],loc[1]:loc[1]+loc[2],:] = \
+                imageVote[loc[0]:loc[0]+loc[2],loc[1]:loc[1]+loc[2],:] + item
+            #add up how many patches we've counted at each location
+            counter[loc[0]:loc[0]+loc[2],loc[1]:loc[1]+loc[2],:] = \
+                counter[loc[0]:loc[0]+loc[2],loc[1]:loc[1]+loc[2],:] + 1.0
+        
+        # SO: we have a 
+        # * counter where each location is how many patches we've used at that location
+        # * image where each location is the probability sum across some number of patches for each class
+        # First Try: average: image / counter (broadcast across num_classes dimension)
+        imageAverage = n.divide(imageVote, counter)
+        #assert imageAverage.shape == image_shape, "Shapes of image and average not correct: "+str(imageAverage.shape)
+        # * now image is probability per class...0-1, so we take the max and assign that index as the label
+        #imageMax = n.max(imageAverage, axis = 2) # gives us the max values, need indices of these...
+        imageMax = n.argmax(imageAverage, axis = 2)
+        #assert imageMax.shape == (imageAverage.shape[0], imageAverage.shape[1]), \
+        #    "Shapes of final max and average not correct: "+str(imageMax.shape)
+        #print imageMax.shape
         #return the image of labels for each pixel
         return imageMax
     
@@ -543,6 +600,7 @@ class ShowConvNet(ConvNet):
         if self.write_features_stream:
             self.do_write_features_stream()
             pl.show()
+        pl.close()
         sys.exit(0)
             
     @classmethod

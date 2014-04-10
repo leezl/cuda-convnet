@@ -127,7 +127,8 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
 
         #to make up for previous versions, where these options did not yet exist: (backwards comp...kinda sucks)
         req_ops = {'test_from_camera': False, 'multi_label': False, 'resolutions': [96], 'with_depth': False, 
-            'full_resolution': True, 'subtract_mean_patch': False, 'use_drop_out': True, 'scale_depth': False}
+            'full_resolution': True, 'subtract_mean_patch': False, 'use_drop_out': True, 'scale_depth': False,
+            'type_depth_sclaing': 0}
         #check for existance of each, else default
         for item in req_ops.keys():
             if item in dp_params:
@@ -158,9 +159,9 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         if self.with_none_class and not 'NONE' in self.batch_meta['label_names']:
             self.batch_meta['label_names'].append('NONE')
 
-        #print "LABELS: "
-        #for item in self.batch_meta['label_names']:
-        #    print item
+        print "LABELS: ", len(self.batch_meta['label_names'])
+        for item in self.batch_meta['label_names']:
+            print item
 
         self.batchSize = 3#48 # hard coded from data for now
         self.scale = 1.0 #0.5 # hard code scaling of the images...
@@ -174,6 +175,8 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
             self.img_size = 240 #or what?
         self.inner_size = self.resolutions[0]#96 #64 #make images 64 by 64
         self.final_size = dp_params['final_res']#48 #images need to be much smaller?
+        print "resolutions for patches ",self.resolutions
+        print "final resolution ", self.final_size
 
         #set up to have same size images: should force the same size batch for each training image
         if self.crop_general:
@@ -200,12 +203,22 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         #mean is very troubling: want patches, but need to be able to - and add mean...
         if self.with_depth:
             self.data_mean = self.batch_meta['data_mean']#.reshape((self.full_img_size))
-            if self.scale_depth:
-                #scale depth
+            if self.scale_depth and self.type_depth_scaling==0:
+                #scale depth down
                 minVal = 0.0
                 maxVal = 9870.0
-                self.data_mean[:,:,3] = n.round(255.0 * (self.data_mean[:,:,3] - minVal) / (maxVal - minVal - 1.0))
+                newMaxVal = 255.0
+                #apply scaling to depth
+                self.data_mean[:,:,3] = n.round(newMaxVal * (self.data_mean[:,:,3] - minVal) / (maxVal - minVal - 1.0))
+            elif self.scale_depth and self.type_depth_scaling==1:
+                #scale color up
+                minVal = 0.0
+                maxVal = 255.0
+                newMaxVal = 9870.0
+                #apply scaling to color
+                self.data_mean[:,:,:3] = n.round(newMaxVal * (self.data_mean[:,:,:3] - minVal) / (maxVal - minVal - 1.0))
         else:
+            #cut the mean out
             self.data_mean = self.batch_meta['data_mean'][:,:,:3]
 
         #Can we be sure labeled thing is in all of these? depends entirely on size, postion etc...
@@ -351,16 +364,7 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         #scale depth down to similar range as rest of data...
         #so: # no done before mean subtraction, scale depth portion of mean too
         startTime = time.time()
-        if self.scale_depth:
-            #scale the last dimension of every sample to be 0-255
-            minVal = 0.0
-            maxVal = batchData[:,:,:,3].max()#max across all depth: this is temp est
-            #assert maxVal==9870, "Max changed "+str(maxVal)+','+str(9870)
-            if maxVal!=9870:
-                print "Max value varies ",maxVal,',',9870
-            #scaled_depth = np.round(255.0 * (depth - minVal) / (maxVal - minVal - 1.0))
-            #batchData[:,:,:,3] = n.round(255.0 * (batchData[:,:,:,3] - minVal) / (maxVal - minVal - 1.0))
-            batchData[:,:,:,3] = n.round(255.0 * (batchData[:,:,:,3] - minVal) / (9870.0 - minVal - 1.0))
+        batchData = self.scale_for_depth(batchData)
         #print "scaling depth: ",time.time()-startTime
         #have full images, subtract mean
         startTime= time.time()
@@ -413,7 +417,7 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         #no patches here
         if image.shape[0]<resolution or image.shape[1]<resolution:
             #
-            print "WARNING: RESOLUTION TOO Large"
+            print "WARNING: RESOLUTION TOO Large ",image.shape[0],',',image.shape[1],',',resolution
             #widenCrop()? need full image
             return [], []
         #check stride, reset if invalid
@@ -600,7 +604,8 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
             patchesOut = patchesOut_shuf
             patchesOutLoc = patchesOutLoc_shuf
             #drop some...say force length same as the patchesIn for now
-            if len(patchesIn)<len(patchesOut): #less test
+            if not self.test and len(patchesIn)<len(patchesOut): #less test
+                #print "Dropping some background for training "
                 patchesOut = patchesOut[:len(patchesIn)/4]
                 patchesOutLoc = patchesOutLoc[:len(patchesOut)]
             #add the patches
@@ -630,6 +635,29 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         return image[:,:,::-1]
         #return n.concatenate((image[:,:,2].reshape(image.shape[0], image.shape[1], 1),image[:,:,1].reshape(image.shape[0], image.shape[1], 1),image[:,:,0].reshape(image.shape[0], image.shape[1], 1)), axis=2)
 
+    def scale_for_depth(self, data):
+        if self.scale_depth and self.type_depth_scaling==0:
+            #scale the last dimension of every sample to be 0-255
+            minVal = 0.0
+            maxVal = 9870.0
+            newMaxVal = 255.0
+            #maxVal = origData[:,:,:,3].max() #max across all depth
+            #assert maxVal==9870, "Max changed "+str(maxVal)+','+str(9870)
+            #if maxVal!=9870:
+            #    print "Max value varies ",maxVal,',',9870
+            #scaled_depth = np.round(255.0 * (depth - minVal) / (maxVal - minVal - 1.0))
+            #origData[:,:,:,3] = n.round(255.0 * (origData[:,:,:,3] - minVal) / (maxVal - minVal - 1.0))
+            data[:,:,:,3] = n.round(newMaxVal * (data[:,:,:,3] - minVal) / (maxVal - minVal - 1.0))
+        if self.scale_depth and self.type_depth_scaling==1:
+            #scale the last dimension of every sample to be 0-255
+            minVal = 0.0
+            maxVal = 255.0
+            newMaxVal = 9870.0
+            #scaled_depth = np.round(255.0 * (depth - minVal) / (maxVal - minVal - 1.0))
+            #origData[:,:,:,3] = n.round(255.0 * (origData[:,:,:,3] - minVal) / (maxVal - minVal - 1.0))
+            data[:,:,:,:3] = n.round(newMaxVal * (data[:,:,:,:3] - minVal) / (maxVal - minVal - 1.0))
+        return data
+
     '''
     loads data and labels and formats them according to params
     '''
@@ -645,27 +673,18 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         #need to parse thisBatch into proper format: pull out images and stack for training;
         #scale depth down to similar range as rest of data...
         #so: # no done before mean subtraction, scale depth portion of mean too
-        if self.scale_depth:
-            #scale the last dimension of every sample to be 0-255
-            minVal = 0.0
-            maxVal = origData[:,:,:,3].max() #max across all depth
-            #assert maxVal==9870, "Max changed "+str(maxVal)+','+str(9870)
-            if maxVal!=9870:
-                print "Max value varies ",maxVal,',',9870
-            #scaled_depth = np.round(255.0 * (depth - minVal) / (maxVal - minVal - 1.0))
-            #origData[:,:,:,3] = n.round(255.0 * (origData[:,:,:,3] - minVal) / (maxVal - minVal - 1.0))
-            origData[:,:,:,3] = n.round(255.0 * (origData[:,:,:,3] - minVal) / (9870.0 - minVal - 1.0))
+        origData = self.scale_for_depth(origData)
+        #remove the depth if needed: after mean removed? before now...
+        if not self.with_depth:
+            #cut last channel of each item
+            #fullData = [item[:,:,:3] for item in fullData]
+            origData = origData[:,:,:,:3]
         #pull out labels for self.word and stack for label vector 
         if not self.subtract_mean_patch:
             origData = origData-self.data_mean
         #resize if needed now
         if not self.full_resolution:
             origData = [misc.imresize(origData[i][0],(self.full_img_size[0],self.full_img_size[1]), interp='bilinear', mode=None) for i in range(0,len(origData))]
-        #remove the depth if needed: after mean removed
-        if not self.with_depth:
-            #cut last channel of each item
-            #fullData = [item[:,:,:3] for item in fullData]
-            origData = origData[:,:,:,:3]
         assert origData[0].shape==self.full_img_size, \
             "Shape of data is wrong "+str(origData[0].shape) +" "+str(self.full_img_size)
         #get labels : multi-label: per image: a value for each word in dictionary
@@ -675,6 +694,14 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         #now: grab patches/resize to the self.inner_size and keep labels associated correctly
         #find area of interest Stored in dictionary with data, labels, dictionary
         fixCrop = self.get_crop_from_file(batch)
+        '''
+        if not self.test:
+            #gets proper patches
+            fixCrop = self.get_crop_from_file(batch)
+        else:
+            #forces random patches
+            fixCrop = [() for i in range(0, len(batch['crop_boxes']))]
+        '''
         #get patches of image, correctly labeled
         data, labels, locs = self.get_patched_data_from_file(origData, labels_mid, fixCrop)
         #shuffle the above to mix them up a little more?
@@ -697,16 +724,7 @@ class KinectDataProvider(LabeledMemoryDataProvider):#Labeled or LabeledMemory
         #need to parse thisBatch into proper format: pull out images and stack for training;
         #scale depth down to similar range as rest of data...
         #so: # no done before mean subtraction, scale depth portion of mean too
-        if self.scale_depth:
-            #scale the last dimension of every sample to be 0-255
-            minVal = 0.0
-            maxVal = origData[:,:,:,3].max() #max across all depth
-            #assert maxVal==9870, "Max changed "+str(maxVal)+','+str(9870)
-            if maxVal!=9870:
-                print "Max value varies ",maxVal,',',9870
-            #scaled_depth = np.round(255.0 * (depth - minVal) / (maxVal - minVal - 1.0))
-            #origData[:,:,:,3] = n.round(255.0 * (origData[:,:,:,3] - minVal) / (maxVal - minVal - 1.0))
-            origData[:,:,:,3] = n.round(255.0 * (origData[:,:,:,3] - minVal) / (9870.0 - minVal - 1.0))
+        origData = self.scale_for_depth(origData)
         #pull out labels for self.word and stack for label vector 
         if not self.subtract_mean_patch:
             origData = origData-self.data_mean
