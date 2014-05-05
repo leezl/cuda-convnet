@@ -83,7 +83,7 @@ class CroppedCIFARDataProvider(LabeledMemoryDataProvider):
         cropped = self.cropped_data[self.batches_generated % 2]
 
         self.__trim_borders(datadic['data'], cropped)
-        cropped -= self.data_mean #REMOVE -=mean for test
+        #cropped -= self.data_mean #REMOVE -=mean for test
         self.batches_generated += 1
         return epoch, batchnum, [cropped, datadic['labels']]
         

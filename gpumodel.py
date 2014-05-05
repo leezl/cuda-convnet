@@ -314,14 +314,14 @@ class IGPUModel:
         while True:
             data = next_data
             self.start_batch(data, train=False)
-            #TODO: if streaming tests, change this check so it keeps testing until ctrl+C?
+            #if streaming tests, change this check so it keeps testing until ctrl+C? (it should stop then anyway)
             #or self.op.get_value('stream_testing') or self.op.get_value('test_from_camera')
             load_next = (not self.test_one and data[1] < self.test_batch_range[-1]) or (self.op.get_value('test_from_camera') and not self.test_one)
             if load_next: # load next batch
                 #gets locs from kinect data provider here..
                 next_data = self.get_next_batch(train=False)
             test_outputs += [self.finish_batch()]
-            #TODO: if we are streaming from camera, we do not want to keep test results forever. : drop this after some amount...
+            #if we are streaming from camera, we do not want to keep test results forever. : drop this after some amount...
             if self.op.get_value('test_from_camera'):
                 #drop first batch in list
                 assert len(test_outputs)>1, "test_outputs too short to drop a batch "+str(len(test_outputs))

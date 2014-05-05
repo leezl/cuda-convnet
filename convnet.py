@@ -201,6 +201,7 @@ class ConvNet(IGPUModel):
         op.add_option("subtract-mean-patch", "subtract_mean_patch", BooleanOptionParser, "Subtract mean patch rather than mean image?", default=0) #False
         op.add_option("use-drop-out", "use_drop_out", BooleanOptionParser, "Drop out 20% of data from image?", default=1)
         op.add_option("scale-depth", "scale_depth", BooleanOptionParser, "Scale the depth data?", default=0, requires=['with_depth'])
+        op.add_option("type-depth-scaling", "type_depth_scaling", BooleanOptionParser, "Scale down depth, or up color?", default=0, requires=['scale_depth'])
         print "ADDED OPTIONS"
                 
         op.delete_option('max_test_err')
